@@ -89,6 +89,7 @@ func (s *Server) fetchUpstreamModels(r *http.Request) []string {
 		req.Header.Set("x-api-key", key)
 	}
 	req.Header.Set("anthropic-version", anthropicVersionDefault)
+	req.Header.Set("User-Agent", s.userAgent())
 
 	resp, err := s.client.Do(req)
 	if err != nil {

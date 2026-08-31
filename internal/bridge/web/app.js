@@ -82,7 +82,7 @@ async function saveConfig(ev) {
   try {
     const r = await fetch("/config", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: testKeyHeaders(),
       body: JSON.stringify(payload),
     });
     const res = await r.json();

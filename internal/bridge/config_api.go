@@ -17,6 +17,11 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		writeJSON(w, http.StatusOK, s.configView(s.cfg()))
 	case http.MethodPost:
+		// Mutations can repoint the upstream, so they need the token when one is
+		// configured. Reads stay open: they only expose a masked key.
+		if !s.mutationAuthorized(w, r) {
+			return
+		}
 		s.applyConfig(w, r)
 	default:
 		writeOpenAIError(w, http.StatusMethodNotAllowed, "invalid_request_error", "method not allowed")

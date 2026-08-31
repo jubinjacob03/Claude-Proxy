@@ -111,6 +111,31 @@ func TestMapModelUsesExactThenWildcard(t *testing.T) {
 	}
 }
 
+func TestIsLoopbackOriginRejectsRemoteSites(t *testing.T) {
+	// A reflected Origin would let any site you visit drive the proxy from your
+	// browser, so only loopback origins may be echoed.
+	allowed := []string{
+		"http://localhost:3001", "http://127.0.0.1:3001",
+		"https://localhost", "http://[::1]:8080", "http://127.0.0.2:3001",
+	}
+	denied := []string{
+		"https://evil.example", "http://attacker.test:3001",
+		"http://169.254.169.254", "http://localhost.evil.com", "", "not-a-url",
+		"http://10.0.0.5:3001",
+	}
+
+	for _, o := range allowed {
+		if !isLoopbackOrigin(o) {
+			t.Errorf("origin %q should be allowed", o)
+		}
+	}
+	for _, o := range denied {
+		if isLoopbackOrigin(o) {
+			t.Errorf("origin %q must be rejected", o)
+		}
+	}
+}
+
 func TestRequiresClientAuth(t *testing.T) {
 	guarded := []string{"/v1/messages", "/v1/chat/completions", "/v1/models", "/models", "/features", "/stop"}
 	open := []string{"/", "/health", "/status", "/config", "/admin/stats", "/app.js"}

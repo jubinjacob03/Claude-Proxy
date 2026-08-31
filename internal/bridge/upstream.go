@@ -25,6 +25,9 @@ func (s *Server) newUpstreamRequest(ctx context.Context, path string, body []byt
 	} else {
 		req.Header.Set("Accept", "application/json")
 	}
+	// Identify ourselves rather than leaving Go's default UA. Routers like
+	// GoRouter sit behind Cloudflare, which is friendlier to a named client.
+	req.Header.Set("User-Agent", s.userAgent())
 
 	key := s.resolveKey(clientHeader)
 	switch format {

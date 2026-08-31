@@ -68,6 +68,10 @@ func flusher(w http.ResponseWriter) func() {
 	return func() {}
 }
 
+func (s *Server) userAgent() string {
+	return "claude-proxy/" + s.version
+}
+
 // beginStream sets SSE headers and counts the stream for /metrics.
 func (s *Server) beginStream(w http.ResponseWriter) func() {
 	s.streamCount.Add(1)

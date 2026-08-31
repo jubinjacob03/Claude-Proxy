@@ -248,8 +248,16 @@ Standard library only — no external dependencies.
 - Binds `127.0.0.1` by default; it holds your GoRouter key. Set `AUTH_TOKEN` (and
   TLS) before exposing it beyond localhost.
 - `AUTH_TOKEN` is compared in constant time; `/v1/*` requires it when set.
-- `/config` never returns secret values — only a masked hint.
+- **CORS is only granted to loopback origins.** Reflecting an arbitrary `Origin`
+  would let any website you visit drive this proxy from your browser — including
+  repointing `upstream_base_url` at their server and capturing your key. Remote
+  origins get no CORS headers, so the browser blocks them.
+- **`POST /config` and `POST /features` require `AUTH_TOKEN`** when one is set,
+  because they can change where traffic goes. `GET` stays open so the dashboard
+  loads; it only ever returns a masked key hint.
 - `/admin/clients` shows key fingerprints (not keys) and IPs; fine for localhost.
+- If you set `AUTH_TOKEN`, enter it in the dashboard's token field so the
+  dashboard can save settings and call the API.
 
 ## License
 

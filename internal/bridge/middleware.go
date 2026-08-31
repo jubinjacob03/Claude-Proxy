@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -13,12 +14,16 @@ import (
 // per-client request accounting.
 func (s *Server) withMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if origin := r.Header.Get("Origin"); origin != "" {
+		// Reflect CORS only for loopback origins. Echoing an arbitrary Origin
+		// would let any website you visit drive this proxy from your browser --
+		// including repointing the upstream and stealing the API key.
+		if origin := r.Header.Get("Origin"); origin != "" && isLoopbackOrigin(origin) {
 			h := w.Header()
 			h.Set("Access-Control-Allow-Origin", origin)
 			h.Set("Access-Control-Allow-Headers", "Authorization, Content-Type, x-api-key, anthropic-version, anthropic-beta")
 			h.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 			h.Set("Access-Control-Max-Age", "86400")
+			h.Set("Vary", "Origin")
 		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -55,6 +60,35 @@ func isDashboardAsset(path string) bool {
 		return true
 	}
 	return false
+}
+
+// mutationAuthorized guards state-changing management calls. It writes a 401 and
+// reports false when an AUTH_TOKEN is configured but absent or wrong.
+func (s *Server) mutationAuthorized(w http.ResponseWriter, r *http.Request) bool {
+	if s.cfg().AuthToken == "" {
+		return true
+	}
+	if s.clientAuthorized(r) {
+		return true
+	}
+	note(r, "bad client key")
+	writeOpenAIError(w, http.StatusUnauthorized, "authentication_error", "invalid or missing API key")
+	return false
+}
+
+// isLoopbackOrigin reports whether a browser Origin belongs to this machine, on
+// any port. Anything else is treated as untrusted.
+func isLoopbackOrigin(origin string) bool {
+	u, err := url.Parse(origin)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	host := u.Hostname()
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // requiresClientAuth marks the API surface guarded by AUTH_TOKEN. The dashboard,

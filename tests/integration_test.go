@@ -295,6 +295,60 @@ func TestFeaturesOverrideReachesUpstream(t *testing.T) {
 	}
 }
 
+func TestCORSIsNotReflectedToRemoteOrigins(t *testing.T) {
+	mock := newMockGoRouter(t)
+	br := newBridge(t, mock.server.URL, nil)
+
+	// A malicious page must not get a CORS grant, otherwise it could drive the
+	// proxy from the victim's browser and repoint the upstream.
+	req, _ := http.NewRequest(http.MethodOptions, br.URL+"/config", nil)
+	req.Header.Set("Origin", "https://evil.example")
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("preflight: %v", err)
+	}
+	defer resp.Body.Close()
+	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("remote origin was granted CORS: %q", got)
+	}
+
+	// The dashboard's own loopback origin still works.
+	req, _ = http.NewRequest(http.MethodOptions, br.URL+"/config", nil)
+	req.Header.Set("Origin", "http://127.0.0.1:3001")
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	resp2, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("preflight: %v", err)
+	}
+	defer resp2.Body.Close()
+	if got := resp2.Header.Get("Access-Control-Allow-Origin"); got != "http://127.0.0.1:3001" {
+		t.Errorf("loopback origin should be allowed, got %q", got)
+	}
+}
+
+func TestConfigMutationRequiresAuthTokenWhenSet(t *testing.T) {
+	mock := newMockGoRouter(t)
+	br := newBridge(t, mock.server.URL, func(c *bridge.Config) { c.AuthToken = "secret" })
+
+	// Repointing the upstream is how a key gets stolen; it must need the token.
+	resp, _ := postJSON(t, br.URL+"/config", `{"upstream_base_url":"https://evil.example"}`, nil)
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated /config POST = %d, want 401", resp.StatusCode)
+	}
+	_, cfg := getJSON(t, br.URL+"/config", nil)
+	if cfg["upstream_base_url"] != mock.server.URL {
+		t.Errorf("upstream was changed without auth: %v", cfg["upstream_base_url"])
+	}
+
+	// With the token it succeeds.
+	resp, body := postJSON(t, br.URL+"/config", `{"default_model":"claude-opus-5"}`,
+		map[string]string{"x-api-key": "secret"})
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("authenticated /config POST = %d: %s", resp.StatusCode, body)
+	}
+}
+
 func TestConfigUpdateAppliesLive(t *testing.T) {
 	mock := newMockGoRouter(t)
 	br := newBridge(t, mock.server.URL, nil)
