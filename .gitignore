@@ -1,0 +1,7 @@
+/claude-proxy
+/claude-proxy.exe
+/dist/
+*.log
+.env
+.env.local
+.DS_Store

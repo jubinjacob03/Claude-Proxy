@@ -1,0 +1,9 @@
+.git
+.github
+dist
+claude-proxy
+claude-proxy.exe
+*.log
+.env
+.env.local
+README.md

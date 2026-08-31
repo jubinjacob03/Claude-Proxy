@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Claude-Proxy · GoRouter</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">◆</span>
+        <div>
+          <h1>Claude-Proxy</h1>
+          <p class="tagline">GoRouter → Claude, for Trae &amp; Claude Code</p>
+        </div>
+      </div>
+      <div class="status" id="status">
+        <span class="dot" id="statusDot"></span>
+        <span id="statusText">connecting…</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="card">
+        <div class="card-head">
+          <h2>Settings</h2>
+          <span class="hint" id="envPath"></span>
+        </div>
+        <form id="settingsForm" class="grid">
+          <label
+            >Upstream base URL
+            <input
+              name="upstream_base_url"
+              type="text"
+              placeholder="https://gorouter.app"
+              spellcheck="false"
+            />
+          </label>
+          <label
+            >Upstream format
+            <select name="upstream_format">
+              <option value="anthropic">
+                anthropic (native passthrough — recommended)
+              </option>
+              <option value="openai">openai (translate)</option>
+            </select>
+          </label>
+          <label
+            >GoRouter API key
+            <input
+              name="upstream_api_key"
+              type="password"
+              placeholder="leave blank to keep current"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <span class="sub" id="keyState"></span>
+          </label>
+          <label
+            >Client auth token (optional)
+            <input
+              name="auth_token"
+              type="password"
+              placeholder="require this token from clients"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </label>
+          <label
+            >Default model
+            <input
+              name="default_model"
+              type="text"
+              placeholder="claude-opus-4-8"
+              spellcheck="false"
+            />
+          </label>
+          <label
+            >Default max tokens
+            <input name="default_max_tokens" type="number" min="1" />
+          </label>
+          <label class="wide"
+            >Model map
+            <span class="sub"
+              >from=to, comma-separated, <code>*</code> = catch-all</span
+            >
+            <input
+              name="model_map"
+              type="text"
+              placeholder="claude-3-5-sonnet-20241022=claude-opus-4-8,*=claude-opus-4-8"
+              spellcheck="false"
+            />
+          </label>
+          <label
+            >Stream idle ping (s)
+            <input name="stream_idle_ping_seconds" type="number" min="0" />
+          </label>
+          <label
+            >Request timeout (s)
+            <input name="request_timeout_seconds" type="number" min="0" />
+          </label>
+          <label
+            >Log level
+            <select name="log_level">
+              <option>debug</option>
+              <option>info</option>
+              <option>warn</option>
+              <option>error</option>
+              <option>off</option>
+            </select>
+          </label>
+          <label
+            >Log format
+            <select name="log_format">
+              <option>text</option>
+              <option>json</option>
+            </select>
+          </label>
+          <label class="check"
+            ><input name="log_bodies" type="checkbox" /> Log request bodies
+            (debug)</label
+          >
+          <label class="check"
+            ><input name="persist" type="checkbox" checked /> Persist to
+            .env</label
+          >
+          <div class="actions wide">
+            <button type="submit" class="primary">Save settings</button>
+            <button type="button" id="reloadBtn">Reload</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>Models</h2>
+          <button type="button" id="loadModels">Load from GoRouter</button>
+        </div>
+        <div class="muted" id="modelsHint">
+          Per-request billing: each call is a flat fee × group ratio, regardless
+          of tokens.
+        </div>
+        <div class="models" id="models"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h2>Test</h2></div>
+        <div class="test">
+          <div class="test-row">
+            <input
+              id="testModel"
+              type="text"
+              placeholder="claude-opus-4-8"
+              spellcheck="false"
+            />
+            <input
+              id="testKey"
+              type="password"
+              placeholder="proxy key (only if one is set)"
+              autocomplete="off"
+            />
+          </div>
+          <textarea
+            id="testPrompt"
+            rows="3"
+            placeholder="Say hello and name your model."
+          >
+Say hello and name your model.</textarea
+          >
+          <div class="test-row">
+            <button type="button" id="sendTest" class="primary">Send</button>
+            <span class="sub" id="testMeta"></span>
+          </div>
+          <pre id="testOut" class="out" hidden></pre>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h2>Connect your tools</h2></div>
+        <div class="snippets" id="snippets"></div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" hidden></div>
+    <script src="/app.js"></script>
+  </body>
+</html>
