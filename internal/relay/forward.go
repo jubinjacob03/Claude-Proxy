@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"claude-proxy/internal/license"
 	"claude-proxy/internal/logx"
 )
 
@@ -15,7 +16,7 @@ const anthropicVersionDefault = "2023-06-01"
 // forward relays the client's body to the upstream using a pooled credential
 // and streams the answer straight back. It returns the upstream status so the
 // caller can decide whether the request was billable; 0 means it never ran.
-func (s *Server) forward(w http.ResponseWriter, r *http.Request, baseURL, secret string, body []byte, streamed bool) int {
+func (s *Server) forward(w http.ResponseWriter, r *http.Request, baseURL string, poolKey *license.PoolKey, body []byte, streamed bool) int {
 	req, err := http.NewRequestWithContext(r.Context(), r.Method, baseURL+r.URL.Path, bytes.NewReader(body))
 	if err != nil {
 		writeUpstreamError(w, r, http.StatusBadGateway, "upstream request could not be built")
@@ -32,9 +33,9 @@ func (s *Server) forward(w http.ResponseWriter, r *http.Request, baseURL, secret
 
 	// The pooled secret is attached here and nowhere else. It never travels
 	// back towards the client.
-	req.Header.Set("Authorization", "Bearer "+secret)
+	req.Header.Set("Authorization", "Bearer "+poolKey.Secret)
 	if isAnthropicPath(r.URL.Path) {
-		req.Header.Set("x-api-key", secret)
+		req.Header.Set("x-api-key", poolKey.Secret)
 		version := r.Header.Get("anthropic-version")
 		if version == "" {
 			version = anthropicVersionDefault
@@ -50,6 +51,13 @@ func (s *Server) forward(w http.ResponseWriter, r *http.Request, baseURL, secret
 		logx.Error("upstream %s failed: %v", r.URL.Path, err)
 		writeUpstreamError(w, r, http.StatusBadGateway, "upstream request failed")
 		return 0
+	}
+	if shouldRetirePoolKey(resp.StatusCode) {
+		if err := s.store.SetPoolKeyActive(poolKey.ID, false); err != nil {
+			logx.Error("retire pool key %s failed: %v", poolKey.ID, err)
+		} else {
+			logx.Warn("retired pool key %s after upstream status %d", poolKey.ID, resp.StatusCode)
+		}
 	}
 	defer resp.Body.Close()
 
@@ -161,4 +169,8 @@ func openAIErrorType(status int) string {
 	default:
 		return "api_error"
 	}
+}
+
+func shouldRetirePoolKey(status int) bool {
+	return status == http.StatusUnauthorized || status == http.StatusForbidden || status == http.StatusPaymentRequired
 }

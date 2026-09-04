@@ -20,14 +20,24 @@ type upstream struct {
 
 func newUpstream(t *testing.T) *upstream {
 	t.Helper()
+	return newUpstreamWithStatus(t, http.StatusOK)
+}
+
+func newUpstreamWithStatus(t *testing.T, status int) *upstream {
+	t.Helper()
 	u := &upstream{}
 	u.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u.calls++
 		u.lastHdr = r.Header.Clone()
 		w.Header().Set("Content-Type", "application/json")
-		io.WriteString(w, `{"id":"msg_1","type":"message","role":"assistant","model":"claude-opus-5",`+
-			`"content":[{"type":"text","text":"hi"}],"stop_reason":"end_turn","stop_sequence":null,`+
-			`"usage":{"input_tokens":1,"output_tokens":1}}`)
+		w.WriteHeader(status)
+		if status >= 200 && status < 300 {
+			io.WriteString(w, `{"id":"msg_1","type":"message","role":"assistant","model":"claude-opus-5",`+
+				`"content":[{"type":"text","text":"hi"}],"stop_reason":"end_turn","stop_sequence":null,`+
+				`"usage":{"input_tokens":1,"output_tokens":1}}`)
+			return
+		}
+		io.WriteString(w, `{"error":{"message":"nope"}}`)
 	}))
 	t.Cleanup(u.server.Close)
 	return u
@@ -311,6 +321,24 @@ func TestUpstreamAuthFailureIsNotBilled(t *testing.T) {
 		srv.Close()
 		refusing.Close()
 		store.Close()
+	}
+}
+
+func TestPoolKeyIsRetiredOnUpstreamAuthOrBalanceFailure(t *testing.T) {
+	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusPaymentRequired} {
+		up := newUpstreamWithStatus(t, status)
+		srv, store, lic := newRelay(t, up, 7000)
+		token := activate(t, srv.URL, lic.Key, "machine-a")
+
+		post(t, srv.URL+"/v1/messages", messageBody, map[string]string{"Authorization": "Bearer " + token})
+
+		keys := store.ListPoolKeys()
+		if len(keys) != 1 {
+			t.Fatalf("keys = %d, want 1", len(keys))
+		}
+		if keys[0].Active {
+			t.Fatalf("status %d left the pool key active", status)
+		}
 	}
 }
 

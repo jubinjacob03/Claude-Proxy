@@ -19,6 +19,8 @@ const (
 	FormatAnthropic UpstreamFormat = "anthropic"
 )
 
+var defaultRelayBaseURL = "http://68.233.112.166:43219"
+
 type Config struct {
 	Host string
 	Port int
@@ -102,7 +104,7 @@ func Load() (*Config, error) {
 		LogFormat:        strings.ToLower(env.str("LOG_FORMAT", "text")),
 		LogBodies:        env.boolVal("LOG_BODIES", false),
 		EnvPath:          targetEnvPath(),
-		RelayBaseURL:     strings.TrimRight(env.str("RELAY_BASE_URL", "http://127.0.0.1:43211"), "/"),
+		RelayBaseURL:     strings.TrimRight(env.str("RELAY_BASE_URL", defaultRelayBaseURL), "/"),
 		LicenseKey:       env.str("LICENSE_KEY", ""),
 	}
 

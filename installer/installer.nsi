@@ -297,6 +297,7 @@ Function WriteEnv
   ${EndIf}
   FileWrite $0 "HOST=127.0.0.1$\r$\n"
   FileWrite $0 "PORT=3001$\r$\n"
+  FileWrite $0 "RELAY_BASE_URL=http://68.233.112.166:43219$\r$\n"
   FileWrite $0 "LICENSE_KEY=$LicenseKey$\r$\n"
   FileWrite $0 "UPSTREAM_FORMAT=anthropic$\r$\n"
   FileWrite $0 "AUTH_TOKEN=$\r$\n"

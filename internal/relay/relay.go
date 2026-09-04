@@ -163,7 +163,7 @@ func (s *Server) handleFree(w http.ResponseWriter, r *http.Request) {
 		writeUpstreamError(w, r, http.StatusServiceUnavailable, "No upstream capacity is available.")
 		return
 	}
-	s.forward(w, r, target, key.Secret, body, false)
+	s.forward(w, r, target, key, body, false)
 }
 
 // handleProxy is the metered path: authenticate, price, debit, forward.
@@ -204,7 +204,7 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	status := s.forward(w, r, target, poolKey.Secret, body, streamed)
+	status := s.forward(w, r, target, poolKey, body, streamed)
 
 	// Bill only what the upstream actually served. Anything else - a dead
 	// pooled key (401/403), our own exhausted upstream account (402), a
