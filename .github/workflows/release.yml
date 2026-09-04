@@ -1,80 +1,182 @@
-name: release
+name: Build Windows Release
 
 on:
   push:
-    tags: ["v*"]
+    branches:
+      - release
   workflow_dispatch:
+
+concurrency:
+  group: release-build-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
 
 jobs:
-  verify:
+  race:
+    name: Race detector
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.25"
-      - name: Verify formatting
-        run: |
-          unformatted="$(gofmt -l .)"
-          if [ -n "$unformatted" ]; then
-            echo "These files need gofmt:"
-            echo "$unformatted"
-            exit 1
-          fi
-      - run: go vet ./...
-      - run: go test ./... -count=1
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - name: Verify web build
-        working-directory: web
-        run: |
-          npm ci
-          npm run build
+      - name: Check out source
+        uses: actions/checkout@v4
 
-  build-relay:
-    needs: verify
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
-      - name: Build relay binaries
-        run: |
-          version="${GITHUB_REF_NAME:-dev}"
-          mkdir -p dist
-          for target in linux/amd64 linux/arm64; do
-            os="${target%/*}"; arch="${target#*/}"
-            out="dist/claude-relay-${os}-${arch}"
-            echo "building $out"
-            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build \
-              -trimpath -ldflags "-s -w -X main.version=${version}" -o "$out" ./cmd/claude-relay
-          done
-      - uses: actions/upload-artifact@v4
-        with:
-          name: claude-relay-binaries
-          path: dist/
+          go-version-file: go.mod
+          cache: true
 
-  build-client:
-    needs: verify
+      - name: Test with -race
+        run: go test -race -count=1 ./...
+
+  build-windows:
+    name: Build installer and publish release
+    needs: race
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - name: Check out source
+        uses: actions/checkout@v4
         with:
-          go-version: "1.25"
-      - name: Build Windows installer
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Resolve dependencies
+        run: |
+          go mod download
+          npm ci --prefix web
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -count=1 ./...
+
+      - name: Ensure web build passes
+        run: npm run build --prefix web
+
+      - name: Ensure NSIS is available
         shell: pwsh
         run: |
-          ./make.ps1 installer
-      - uses: actions/upload-artifact@v4
+          $makensis = @(
+            "${env:ProgramFiles(x86)}\NSIS\makensis.exe",
+            "$env:ProgramFiles\NSIS\makensis.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if ($makensis) {
+            Write-Host "NSIS found at $makensis"
+          }
+          else {
+            Write-Host "NSIS not present on the runner; installing."
+            choco install nsis -y --no-progress
+          }
+
+      - name: Build installer and executables
+        shell: pwsh
+        run: ./make.ps1 installer
+
+      - name: Resolve release version
+        id: version
+        shell: pwsh
+        run: |
+          $nsi = Get-Content installer\installer.nsi -Raw
+          $m = [regex]::Match($nsi, '!define\s+APP_VERSION\s+"([^"]+)"')
+          if (-not $m.Success) { throw "APP_VERSION not found in installer.nsi" }
+          $version = $m.Groups[1].Value
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "tag=v$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Release version $version (tag v$version)"
+
+      - name: Collect release notes from commit
+        shell: pwsh
+        run: |
+          git log -1 --pretty=%B | Out-File -FilePath release-notes.md -Encoding utf8
+          Write-Host "--- release notes ---"
+          Get-Content release-notes.md | Write-Host
+
+      - name: Generate checksums
+        shell: pwsh
+        run: |
+          $files = @(
+            "installer\out\Claude-Proxy-Setup.exe",
+            "installer\staging\claude-proxy.exe",
+            "installer\staging\claude-tray.exe"
+          )
+          $lines = foreach ($f in $files) {
+            $h = (Get-FileHash -Algorithm SHA256 -LiteralPath $f).Hash.ToLower()
+            "$h  $([System.IO.Path]::GetFileName($f))"
+          }
+          $out = "installer\out\SHA256SUMS.txt"
+          [IO.File]::WriteAllText($out, ($lines -join "`n") + "`n")
+          Write-Host "--- SHA256SUMS.txt ---"
+          Get-Content $out | Write-Host
+
+      - name: Report artifact sizes
+        shell: pwsh
+        run: |
+          Get-ChildItem installer\out, installer\staging -File |
+            Select-Object Name, @{n = 'MB'; e = { [math]::Round($_.Length / 1MB, 2) } } |
+            Format-Table -AutoSize | Out-String | Write-Host
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ steps.version.outputs.tag }}"
+          $assets = @(
+            "installer\out\Claude-Proxy-Setup.exe",
+            "installer\out\SHA256SUMS.txt",
+            "installer\staging\claude-proxy.exe",
+            "installer\staging\claude-tray.exe"
+          )
+          foreach ($a in $assets) {
+            if (-not (Test-Path $a)) { throw "missing release asset: $a" }
+          }
+
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            if ($env:GITHUB_EVENT_NAME -ne 'workflow_dispatch') {
+              throw "Release $tag already exists. Bump APP_VERSION in installer/installer.nsi, or re-run manually via workflow_dispatch to overwrite."
+            }
+            Write-Host "Release $tag exists; updating notes and re-uploading assets."
+            gh release edit $tag --title "Claude Proxy $tag" --notes-file release-notes.md --latest
+            if ($LASTEXITCODE -ne 0) { throw "gh release edit failed" }
+            gh release upload $tag @assets --clobber
+            if ($LASTEXITCODE -ne 0) { throw "gh release upload failed" }
+          }
+          else {
+            Write-Host "Creating release $tag."
+            gh release create $tag @assets --target $env:GITHUB_SHA --title "Claude Proxy $tag" --notes-file release-notes.md --latest
+            if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
+          }
+          Write-Host "Published $tag with $($assets.Count) assets."
+
+      - name: Upload installer as workflow artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: claude-client-windows
+          name: Claude-Proxy-Setup
+          path: installer/out/Claude-Proxy-Setup.exe
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Upload standalone executables as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Claude-Proxy-Executables
           path: |
-            installer/out/Claude-Proxy-Setup.exe
-            installer/out/staging/claude-proxy.exe
-            installer/out/staging/claude-tray.exe
+            installer/staging/claude-proxy.exe
+            installer/staging/claude-tray.exe
+          if-no-files-found: error
+          retention-days: 90
