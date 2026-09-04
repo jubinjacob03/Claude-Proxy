@@ -5,6 +5,8 @@ services:
       dockerfile: Dockerfile
     image: claude-proxy-relay:latest
     restart: unless-stopped
+    ports:
+      - "43219:43211"
     environment:
       RELAY_ADDR: :43211
       RELAY_DATA_DIR: /data
@@ -39,6 +41,8 @@ services:
       dockerfile: Dockerfile
     image: claude-proxy-web:latest
     restart: unless-stopped
+    ports:
+      - "3005:8090"
     environment:
       PORT: 8090
       RELAY_BASE_URL: http://relay:43211
@@ -46,7 +50,7 @@ services:
       ADMIN_USER: ${ADMIN_USER:?set ADMIN_USER}
       ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:?set ADMIN_PASSWORD_HASH}
       SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET}
-      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
       TRUST_PROXY: ${TRUST_PROXY:-true}
     depends_on:
       relay:
@@ -58,28 +62,5 @@ services:
       retries: 3
       start_period: 20s
 
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    environment:
-      # The Caddyfile requests a certificate for each of these, so both must
-      # already resolve to this host.
-      WEB_HOST: ${WEB_HOST:?set WEB_HOST}
-      RELAY_HOST: ${RELAY_HOST:?set RELAY_HOST}
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      web:
-        condition: service_healthy
-      relay:
-        condition: service_healthy
-
 volumes:
   relay_data:
-  caddy_data:
-  caddy_config:
