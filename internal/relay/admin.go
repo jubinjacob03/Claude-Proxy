@@ -173,14 +173,14 @@ func (s *Server) handleAdminPoolItem(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"id": k.ID, "label": k.Label, "provider": k.Provider,
-			"pool_group": k.PoolGroup,
-			"balance_cents": int64(k.BalanceCents),
-			"spent_cents": int64(k.SpentCents),
+			"pool_group":      k.PoolGroup,
+			"balance_cents":   int64(k.BalanceCents),
+			"spent_cents":     int64(k.SpentCents),
 			"remaining_cents": int64(k.Remaining()),
-			"active": k.Active,
-			"created_at": k.CreatedAt,
-			"last_used": k.LastUsed,
-			"exhausted_at": k.ExhaustedAt,
+			"active":          k.Active,
+			"created_at":      k.CreatedAt,
+			"last_used":       k.LastUsed,
+			"exhausted_at":    k.ExhaustedAt,
 		})
 	case "disable":
 		s.mutate(w, s.store.SetPoolKeyActive(id, false))

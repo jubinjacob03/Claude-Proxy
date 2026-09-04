@@ -24,8 +24,8 @@ type Server struct {
 	upstreamErrors atomic.Int64
 	streamCount    atomic.Int64
 
-	clientsMu      sync.Mutex
-	clients        map[string]*clientStat
+	clientsMu sync.Mutex
+	clients   map[string]*clientStat
 
 	featuresMu sync.Mutex
 	features   map[string]ModelFeatures
