@@ -44,6 +44,10 @@ func isAnthropicPath(path string) bool {
 	return strings.HasPrefix(path, "/v1/messages")
 }
 
+func (s *Server) handleUnknown(w http.ResponseWriter, r *http.Request) {
+	writeErrorForPath(w, r.URL.Path, http.StatusNotFound, "not_found_error", "no such endpoint: "+r.URL.Path)
+}
+
 // anthropicErrorType maps an HTTP status to an Anthropic error type string.
 func anthropicErrorType(status int) string {
 	switch status {

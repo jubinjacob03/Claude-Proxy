@@ -7,3 +7,5 @@ claude-proxy.exe
 .env
 .env.local
 README.md
+web/node_modules
+web/.next

@@ -35,18 +35,23 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 		raw = rewriteModel(raw, req.Model)
 	}
 
-	upstreamModel := s.cfg().MapModel(req.Model)
+	cfg := s.cfg()
 	clientModel := req.Model
-	annotate(r, upstreamModel, req.Stream)
+	upstreamModel := cfg.MapModel(req.Model)
+	annotate(r, clientModel, req.Stream)
 	ctx, cancel := s.reqContext(r)
 	defer cancel()
 
 	s.logBody("anthropic request", raw)
-
-	if s.cfg().UpstreamFormat == FormatAnthropic {
+	if cfg.UpstreamFormat == FormatAnthropic {
 		body := applyFeatures(rewriteModel(raw, upstreamModel), upstreamModel, s.resolveFeatures(clientModel))
 		s.logBody("-> anthropic passthrough", body)
-		s.passthrough(ctx, w, r.Header, "/v1/messages", body, FormatAnthropic, req.Stream)
+		s.passthrough(ctx, w, r.Header, "/v1/messages", body, upstreamTarget{
+			BaseURL: cfg.UpstreamBaseURL,
+			APIKey:  cfg.UpstreamAPIKey,
+			Format:  FormatAnthropic,
+			Name:    "claude",
+		}, req.Stream)
 		return
 	}
 
@@ -58,7 +63,12 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 	}
 	s.logBody("-> openai request", body)
 
-	upstreamReq, err := s.newUpstreamRequest(ctx, "/v1/chat/completions", body, FormatOpenAI, r.Header, req.Stream)
+	upstreamReq, err := s.newUpstreamRequest(ctx, "/v1/chat/completions", body, upstreamTarget{
+		BaseURL: cfg.UpstreamBaseURL,
+		APIKey:  cfg.UpstreamAPIKey,
+		Format:  FormatOpenAI,
+		Name:    "claude",
+	}, r.Header, req.Stream)
 	if err != nil {
 		s.upstreamError(w, r.URL.Path, err)
 		return
@@ -118,12 +128,16 @@ func (s *Server) handleCountTokens(w http.ResponseWriter, r *http.Request) {
 		req.Model = s.cfg().DefaultModel
 		raw = rewriteModel(raw, req.Model)
 	}
-
 	ctx, cancel := s.reqContext(r)
 	defer cancel()
 
 	if s.cfg().UpstreamFormat == FormatAnthropic {
-		s.passthrough(ctx, w, r.Header, "/v1/messages/count_tokens", rewriteModel(raw, s.cfg().MapModel(req.Model)), FormatAnthropic, false)
+		s.passthrough(ctx, w, r.Header, "/v1/messages/count_tokens", rewriteModel(raw, s.cfg().MapModel(req.Model)), upstreamTarget{
+			BaseURL: s.cfg().UpstreamBaseURL,
+			APIKey:  s.cfg().UpstreamAPIKey,
+			Format:  FormatAnthropic,
+			Name:    "claude",
+		}, false)
 		return
 	}
 

@@ -27,6 +27,13 @@ type Config struct {
 	UpstreamFormat  UpstreamFormat
 	UpstreamAPIKey  string
 
+	// RelayBaseURL and LicenseKey drive one-time activation against the
+	// licence server; see internal/licensing. RelayMode is never read from
+	// env - it is set to true by main.go only after activation succeeds.
+	RelayBaseURL string
+	LicenseKey   string
+	RelayMode    bool
+
 	AuthToken    string
 	DefaultModel string
 
@@ -95,6 +102,8 @@ func Load() (*Config, error) {
 		LogFormat:        strings.ToLower(env.str("LOG_FORMAT", "text")),
 		LogBodies:        env.boolVal("LOG_BODIES", false),
 		EnvPath:          targetEnvPath(),
+		RelayBaseURL:     strings.TrimRight(env.str("RELAY_BASE_URL", "http://127.0.0.1:43211"), "/"),
+		LicenseKey:       env.str("LICENSE_KEY", ""),
 	}
 
 	if c.UpstreamFormat != FormatOpenAI && c.UpstreamFormat != FormatAnthropic {
@@ -102,9 +111,6 @@ func Load() (*Config, error) {
 	}
 	if c.UpstreamBaseURL == "" {
 		return nil, fmt.Errorf("UPSTREAM_BASE_URL is required")
-	}
-	if c.UpstreamAPIKey == "" {
-		logx.Warn("UPSTREAM_API_KEY is empty; upstream requests will be unauthenticated unless the client forwards a key")
 	}
 	if c.DefaultMaxTokens <= 0 {
 		c.DefaultMaxTokens = 4096
@@ -251,7 +257,7 @@ func targetEnvPath() string {
 }
 
 // Save writes the configuration to EnvPath as a .env file. Runtime changes made
-// through the dashboard survive a restart this way.
+// at runtime survive a restart this way.
 func (c *Config) Save() error {
 	path := c.EnvPath
 	if path == "" {
@@ -261,9 +267,15 @@ func (c *Config) Save() error {
 	b.WriteString("# Written by claude-proxy. Edit freely; real env vars still win at startup.\n")
 	fmt.Fprintf(&b, "HOST=%s\n", c.Host)
 	fmt.Fprintf(&b, "PORT=%d\n", c.Port)
-	fmt.Fprintf(&b, "UPSTREAM_BASE_URL=%s\n", c.UpstreamBaseURL)
+	// Under licensing the upstream is the relay and the "key" is a licence
+	// token derived from this machine. Writing either back would skip
+	// activation on the next start and strand the user if the token rotates,
+	// so persist only the settings a direct install owns.
+	if !c.RelayMode {
+		fmt.Fprintf(&b, "UPSTREAM_BASE_URL=%s\n", c.UpstreamBaseURL)
+		fmt.Fprintf(&b, "UPSTREAM_API_KEY=%s\n", c.UpstreamAPIKey)
+	}
 	fmt.Fprintf(&b, "UPSTREAM_FORMAT=%s\n", c.UpstreamFormat)
-	fmt.Fprintf(&b, "UPSTREAM_API_KEY=%s\n", c.UpstreamAPIKey)
 	fmt.Fprintf(&b, "AUTH_TOKEN=%s\n", c.AuthToken)
 	fmt.Fprintf(&b, "DEFAULT_MODEL=%s\n", c.DefaultModel)
 	fmt.Fprintf(&b, "MODEL_MAP=%s\n", ModelMapString(c.ModelMap))
@@ -289,7 +301,7 @@ func ModelMapString(m map[string]string) string {
 	return strings.Join(parts, ",")
 }
 
-// ParseModelMap is the exported form used when applying dashboard updates.
+// ParseModelMap is the exported form used when applying runtime config updates.
 func ParseModelMap(raw string) map[string]string {
 	return parseModelMap(raw)
 }

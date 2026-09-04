@@ -35,17 +35,17 @@ func (s *Server) handleCompletions(w http.ResponseWriter, r *http.Request) {
 		raw = rewriteModel(raw, req.Model)
 	}
 
-	upstreamModel := s.cfg().MapModel(req.Model)
+	cfg := s.cfg()
 	clientModel := req.Model
+	upstreamModel := cfg.MapModel(req.Model)
 	includeUsage := req.StreamOptions != nil && req.StreamOptions.IncludeUsage
-	annotate(r, upstreamModel, req.Stream)
+	annotate(r, clientModel, req.Stream)
 	ctx, cancel := s.reqContext(r)
 	defer cancel()
 
 	s.logBody("openai request", raw)
-
-	if s.cfg().UpstreamFormat == FormatOpenAI {
-		s.passthrough(ctx, w, r.Header, "/v1/chat/completions", rewriteModel(raw, upstreamModel), FormatOpenAI, req.Stream)
+	if cfg.UpstreamFormat == FormatOpenAI {
+		s.passthrough(ctx, w, r.Header, "/v1/chat/completions", rewriteModel(raw, upstreamModel), s.claudeTarget(), req.Stream)
 		return
 	}
 
@@ -58,7 +58,12 @@ func (s *Server) handleCompletions(w http.ResponseWriter, r *http.Request) {
 	body = applyFeatures(body, upstreamModel, s.resolveFeatures(clientModel))
 	s.logBody("-> anthropic request", body)
 
-	upstreamReq, err := s.newUpstreamRequest(ctx, "/v1/messages", body, FormatAnthropic, r.Header, req.Stream)
+	upstreamReq, err := s.newUpstreamRequest(ctx, "/v1/messages", body, upstreamTarget{
+		BaseURL: cfg.UpstreamBaseURL,
+		APIKey:  cfg.UpstreamAPIKey,
+		Format:  FormatAnthropic,
+		Name:    "claude",
+	}, r.Header, req.Stream)
 	if err != nil {
 		s.upstreamError(w, r.URL.Path, err)
 		return

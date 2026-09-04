@@ -152,6 +152,29 @@ func TestRequiresClientAuth(t *testing.T) {
 	}
 }
 
+func TestCanonicalEndpointPath(t *testing.T) {
+	cases := []struct {
+		in      string
+		want    string
+		changed bool
+	}{
+		{in: "/v1/chat/completions", want: "/v1/chat/completions", changed: false},
+		{in: "/V1/chat/completions", want: "/v1/chat/completions", changed: true},
+		{in: "/chat/completions", want: "/v1/chat/completions", changed: true},
+		{in: "/V1/messages", want: "/v1/messages", changed: true},
+		{in: "/messages/count_tokens", want: "/v1/messages/count_tokens", changed: true},
+		{in: "/HEALTH", want: "/health", changed: true},
+		{in: "/unknown", want: "/unknown", changed: false},
+	}
+
+	for _, c := range cases {
+		got, changed := canonicalEndpointPath(c.in)
+		if got != c.want || changed != c.changed {
+			t.Errorf("canonicalEndpointPath(%q) = (%q, %v), want (%q, %v)", c.in, got, changed, c.want, c.changed)
+		}
+	}
+}
+
 func TestParseModelMapRoundTrip(t *testing.T) {
 	m := ParseModelMap("a=1, b=2 ,,bad,c=3")
 	if len(m) != 3 || m["a"] != "1" || m["b"] != "2" || m["c"] != "3" {

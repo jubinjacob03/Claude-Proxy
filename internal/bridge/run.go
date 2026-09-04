@@ -58,7 +58,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/features", s.handleFeatures)
 	mux.HandleFunc("/stop", s.handleStop)
 
-	mux.HandleFunc("/", s.serveDashboard)
+	mux.HandleFunc("/", s.handleUnknown)
 	return withRecover(s.withMiddleware(mux))
 }
 
@@ -103,7 +103,6 @@ func (s *Server) Run() error {
 func (s *Server) banner(c *Config) {
 	logx.Info("claude-proxy %s", s.version)
 	logx.Info("  listening:  http://%s", c.Addr())
-	logx.Info("  dashboard:  http://%s/", c.Addr())
 	logx.Info("  upstream:   %s (%s)", c.UpstreamBaseURL, c.UpstreamFormat)
 	logx.Info("  auth token: %s", logx.Redact(c.AuthToken))
 	logx.Info("  upstream key: %s", logx.Redact(c.UpstreamAPIKey))

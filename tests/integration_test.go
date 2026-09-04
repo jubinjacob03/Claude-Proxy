@@ -20,6 +20,12 @@ type mockGoRouter struct {
 	lastHdr  http.Header
 }
 
+type mockOpenAIUpstream struct {
+	server   *httptest.Server
+	lastBody map[string]any
+	lastHdr  http.Header
+}
+
 func newMockGoRouter(t *testing.T) *mockGoRouter {
 	t.Helper()
 	m := &mockGoRouter{}
@@ -60,6 +66,46 @@ func newMockGoRouter(t *testing.T) *mockGoRouter {
 		io.WriteString(w, `{"id":"msg_mock","type":"message","role":"assistant","model":"claude-opus-4-8",`+
 			`"content":[{"type":"text","text":"Hello from GoRouter"}],"stop_reason":"end_turn","stop_sequence":null,`+
 			`"usage":{"input_tokens":6,"output_tokens":4}}`)
+	})
+
+	m.server = httptest.NewServer(mux)
+	t.Cleanup(m.server.Close)
+	return m
+}
+
+func newMockOpenAIUpstream(t *testing.T) *mockOpenAIUpstream {
+	t.Helper()
+	m := &mockOpenAIUpstream{}
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		m.lastHdr = r.Header.Clone()
+		m.lastBody = map[string]any{}
+		_ = json.Unmarshal(raw, &m.lastBody)
+
+		if stream, _ := m.lastBody["stream"].(bool); stream {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			fl, _ := w.(http.Flusher)
+			for _, e := range []string{
+				`data: {"id":"chatcmpl_claude","object":"chat.completion.chunk","created":1,"model":"claude-3-opus-20240229","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}`,
+				`data: {"id":"chatcmpl_claude","object":"chat.completion.chunk","created":1,"model":"claude-3-opus-20240229","choices":[{"index":0,"delta":{"content":"Hello from Claude"},"finish_reason":null}]}`,
+				`data: {"id":"chatcmpl_claude","object":"chat.completion.chunk","created":1,"model":"claude-3-opus-20240229","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`,
+				`data: [DONE]`,
+			} {
+				io.WriteString(w, e+"\n\n")
+				if fl != nil {
+					fl.Flush()
+				}
+			}
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"chatcmpl_claude","object":"chat.completion","created":1,"model":"claude-3-opus-20240229",`+
+			`"choices":[{"index":0,"message":{"role":"assistant","content":"Hello from Claude"},"finish_reason":"stop"}],`+
+			`"usage":{"prompt_tokens":8,"completion_tokens":4,"total_tokens":12}}`)
 	})
 
 	m.server = httptest.NewServer(mux)
@@ -313,7 +359,7 @@ func TestCORSIsNotReflectedToRemoteOrigins(t *testing.T) {
 		t.Errorf("remote origin was granted CORS: %q", got)
 	}
 
-	// The dashboard's own loopback origin still works.
+	// A loopback origin is still allowed.
 	req, _ = http.NewRequest(http.MethodOptions, br.URL+"/config", nil)
 	req.Header.Set("Origin", "http://127.0.0.1:3001")
 	req.Header.Set("Access-Control-Request-Method", "POST")
@@ -428,7 +474,7 @@ func TestCountTokensEstimatesOnOpenAIUpstream(t *testing.T) {
 	}
 }
 
-func TestDashboardAndAdminEndpoints(t *testing.T) {
+func TestAdminEndpoints(t *testing.T) {
 	mock := newMockGoRouter(t)
 	br := newBridge(t, mock.server.URL, nil)
 
@@ -437,12 +483,8 @@ func TestDashboardAndAdminEndpoints(t *testing.T) {
 		t.Fatalf("get /: %v", err)
 	}
 	defer resp.Body.Close()
-	page, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK || !strings.Contains(string(page), "Claude-Proxy") {
-		t.Errorf("dashboard not served: status %d", resp.StatusCode)
-	}
-	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "text/html") {
-		t.Errorf("dashboard content-type = %q", ct)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("GET / = %d, want 404 now that no UI is served", resp.StatusCode)
 	}
 
 	if _, status := getJSON(t, br.URL+"/status", nil); status["name"] != "claude-proxy" {

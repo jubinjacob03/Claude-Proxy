@@ -23,6 +23,7 @@ type Server struct {
 	totalRequests  atomic.Int64
 	upstreamErrors atomic.Int64
 	streamCount    atomic.Int64
+
 	clientsMu      sync.Mutex
 	clients        map[string]*clientStat
 

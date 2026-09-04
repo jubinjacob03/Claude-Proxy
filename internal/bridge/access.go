@@ -18,6 +18,8 @@ type accessRecord struct {
 	started time.Time
 	method  string
 	path    string
+	alias   string
+	client  string
 	model   string
 	stream  bool
 	outcome string
@@ -25,8 +27,8 @@ type accessRecord struct {
 
 type accessKey struct{}
 
-func newAccessRecord(method, path string) *accessRecord {
-	return &accessRecord{started: time.Now(), method: method, path: path}
+func newAccessRecord(method, path, client string) *accessRecord {
+	return &accessRecord{started: time.Now(), method: method, path: path, client: client}
 }
 
 // withAccess stashes the record on the request so handlers can annotate it.
@@ -55,6 +57,12 @@ func note(r *http.Request, outcome string) {
 	}
 }
 
+func alias(r *http.Request, original string) {
+	if a := accessFrom(r); a != nil {
+		a.alias = original
+	}
+}
+
 // done emits the summary line. Labels are dim and values bright, so the eye lands
 // on model, status, and timing.
 func (a *accessRecord) done(status int, bytesOut int64) {
@@ -63,6 +71,10 @@ func (a *accessRecord) done(status int, bytesOut int64) {
 	b.WriteString(ansi.Bold(ansi.Violet(a.method)))
 	b.WriteByte(' ')
 	b.WriteString(a.path)
+	if a.alias != "" {
+		b.WriteString(ansi.Grey(" alias="))
+		b.WriteString(ansi.Yellow(a.alias))
+	}
 
 	if a.model != "" {
 		b.WriteString(ansi.Grey(" model="))
@@ -86,6 +98,10 @@ func (a *accessRecord) done(status int, bytesOut int64) {
 	if a.outcome != "" {
 		b.WriteByte(' ')
 		b.WriteString(paint("(" + a.outcome + ")"))
+	}
+	if status >= 400 && a.client != "" {
+		b.WriteString(ansi.Grey(" client="))
+		b.WriteString(ansi.Cyan(a.client))
 	}
 
 	logx.Info("%s", b.String())

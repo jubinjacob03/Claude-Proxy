@@ -14,6 +14,11 @@ import (
 // per-client request accounting.
 func (s *Server) withMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		originalPath := r.URL.Path
+		if canonicalPath, changed := canonicalEndpointPath(originalPath); changed {
+			r.URL.Path = canonicalPath
+		}
+
 		// Reflect CORS only for loopback origins. Echoing an arbitrary Origin
 		// would let any website you visit drive this proxy from your browser --
 		// including repointing the upstream and stealing the API key.
@@ -30,16 +35,13 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Static dashboard assets would drown the console; serve them quietly.
-		if isDashboardAsset(r.URL.Path) {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		access := newAccessRecord(r.Method, r.URL.Path)
+		access := newAccessRecord(r.Method, r.URL.Path, clientID(r))
 		sw := &statusWriter{ResponseWriter: w}
 		defer func() { access.done(sw.statusOrOK(), sw.bytes) }()
 		r = withAccess(r, access)
+		if originalPath != r.URL.Path {
+			alias(r, originalPath)
+		}
 
 		if requiresClientAuth(r.URL.Path) {
 			s.track(clientID(r))
@@ -54,12 +56,32 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func isDashboardAsset(path string) bool {
-	switch path {
-	case "/app.js", "/styles.css", "/favicon.ico":
-		return true
+func canonicalEndpointPath(path string) (string, bool) {
+	lower := strings.ToLower(path)
+	switch lower {
+	case "/v1/chat/completions", "/chat/completions":
+		return "/v1/chat/completions", path != "/v1/chat/completions"
+	case "/v1/messages", "/messages":
+		return "/v1/messages", path != "/v1/messages"
+	case "/v1/messages/count_tokens", "/messages/count_tokens":
+		return "/v1/messages/count_tokens", path != "/v1/messages/count_tokens"
+	case "/v1/models":
+		return "/v1/models", path != "/v1/models"
+	case "/models":
+		return "/models", path != "/models"
+	case "/health":
+		return "/health", path != "/health"
+	case "/status":
+		return "/status", path != "/status"
+	case "/config":
+		return "/config", path != "/config"
+	case "/features":
+		return "/features", path != "/features"
+	case "/stop":
+		return "/stop", path != "/stop"
+	default:
+		return path, false
 	}
-	return false
 }
 
 // mutationAuthorized guards state-changing management calls. It writes a 401 and
@@ -91,8 +113,8 @@ func isLoopbackOrigin(origin string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-// requiresClientAuth marks the API surface guarded by AUTH_TOKEN. The dashboard,
-// health, and admin views stay open for localhost use.
+// requiresClientAuth marks the API surface guarded by AUTH_TOKEN. Health and
+// admin views stay open for localhost use.
 func requiresClientAuth(path string) bool {
 	if strings.HasPrefix(path, "/v1/") {
 		return true

@@ -93,15 +93,31 @@ func setSSEHeaders(w http.ResponseWriter) func() {
 // rewriteModel replaces the top-level "model" field in a raw JSON body while
 // leaving every other field byte-identical, for passthrough forwarding.
 func rewriteModel(raw []byte, model string) []byte {
+	return rewriteStreamEnvelope(raw, model, "")
+}
+
+// rewriteStreamEnvelope rewrites only the envelope fields. A stream that mixes
+// proxy-generated frames with relayed ones must present a single message id, or
+// the client sees the identity change mid-message and drops the connection.
+func rewriteStreamEnvelope(raw []byte, model, id string) []byte {
 	var m map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &m); err != nil {
 		return raw
 	}
-	b, err := json.Marshal(model)
-	if err != nil {
-		return raw
+	if model != "" {
+		b, err := json.Marshal(model)
+		if err != nil {
+			return raw
+		}
+		m["model"] = b
 	}
-	m["model"] = b
+	if id != "" {
+		b, err := json.Marshal(id)
+		if err != nil {
+			return raw
+		}
+		m["id"] = b
+	}
 	out, err := json.Marshal(m)
 	if err != nil {
 		return raw

@@ -2,17 +2,20 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"claude-proxy/internal/ansi"
 	"claude-proxy/internal/bridge"
+	"claude-proxy/internal/licensing"
 	"claude-proxy/internal/logx"
 )
 
@@ -54,9 +57,45 @@ func mustConfig() *bridge.Config {
 	}
 	logx.SetLevel(cfg.LogLevel)
 	logx.SetFormat(cfg.LogFormat)
-	// Structured logs must stay free of escape codes.
 	ansi.SetEnabled(cfg.LogFormat != "json")
 	return cfg
+}
+
+func activateOrExit(cfg *bridge.Config) {
+	if cfg.UpstreamAPIKey != "" {
+		return
+	}
+
+	dir, err := executableDir()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "could not determine the install directory:", err)
+		os.Exit(1)
+	}
+
+	client := licensing.NewClient(cfg.RelayBaseURL)
+	token, err := licensing.EnsureActivated(client, dir, cfg.LicenseKey)
+	switch {
+	case errors.Is(err, licensing.ErrNotLicensed):
+		fmt.Fprintln(os.Stderr, "This installation is not licensed.")
+		fmt.Fprintln(os.Stderr, "Run the installer again, or set LICENSE_KEY in .env and restart.")
+		os.Exit(1)
+	case err != nil:
+		fmt.Fprintln(os.Stderr, "Licence activation failed:", err)
+		os.Exit(1)
+	}
+
+	cfg.UpstreamBaseURL = cfg.RelayBaseURL
+	cfg.UpstreamAPIKey = token
+	cfg.RelayMode = true
+	cfg.LicenseKey = ""
+}
+
+func executableDir() (string, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Dir(exe), nil
 }
 
 func runServe(args []string) {
@@ -83,6 +122,7 @@ func runServe(args []string) {
 		cfg.LogLevel = logx.LevelDebug
 		logx.SetLevel(logx.LevelDebug)
 	}
+	activateOrExit(cfg)
 
 	logx.Info("claude-proxy %s starting", appVersion)
 	if err := bridge.NewServer(cfg, appVersion).Run(); err != nil {
@@ -91,10 +131,9 @@ func runServe(args []string) {
 	}
 }
 
-// runClaude starts the proxy in-process and launches Claude Code wired to it,
-// mirroring the ccglm workflow. When Claude Code exits, the proxy shuts down.
 func runClaude(extra []string) {
 	cfg := mustConfig()
+	activateOrExit(cfg)
 	srv := bridge.NewServer(cfg, appVersion)
 	httpSrv, err := srv.Start()
 	if err != nil {
@@ -148,6 +187,12 @@ func claudeEnv(cfg *bridge.Config) []string {
 	return env
 }
 
+func runActivate() {
+	cfg := mustConfig()
+	activateOrExit(cfg)
+	fmt.Println("licence activation succeeded")
+}
+
 func runEnv() {
 	cfg := mustConfig()
 	base := "http://" + cfg.Addr()
@@ -182,8 +227,22 @@ func runStatus() {
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	fmt.Printf("claude-proxy is running at %s\n%s\n", cfg.Addr(), body)
+	fmt.Printf("claude-proxy is running at %s\n", cfg.Addr())
+	if cfg.RelayMode || cfg.RelayBaseURL != "" {
+		dir, derr := executableDir()
+		if derr != nil {
+			fmt.Printf("licence status: unknown\n")
+			return
+		}
+		if cached, cerr := licensing.DebugStatus(dir); cerr == nil {
+			fmt.Printf("licence status: activated\n")
+			if cached.HWID != "" {
+				fmt.Printf("machine status: registered\n")
+			}
+			return
+		}
+	}
+	fmt.Printf("licence status: not available\n")
 }
 
 func shutdown(srv *http.Server) {
@@ -199,7 +258,7 @@ Usage:
   claude-proxy [command] [flags]
 
 Commands:
-  serve            Run the proxy and dashboard (default)
+  serve            Run the proxy (default)
   claude [args]    Start the proxy and launch Claude Code wired to it
   env              Print shell exports to point Claude Code at the proxy
   status           Check whether the proxy is running
@@ -213,6 +272,6 @@ Serve flags:
   --verbose           Debug logging
 
 Configuration is read from environment variables and an optional .env file.
-Open the dashboard at http://127.0.0.1:3001/ to configure it in a browser.
+Use the tray app's Settings menu to change it without editing files.
 `)
 }

@@ -28,6 +28,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		s.upstreamErrors.Load(), "")
 	metric("claude_proxy_streams_total", "Streaming responses served.", "counter",
 		s.streamCount.Load(), "")
+
 	metric("claude_proxy_info", "Build and routing info.", "gauge", 1,
 		fmt.Sprintf("{version=%q,upstream=%q,format=%q,model=%q}",
 			s.version, c.UpstreamBaseURL, c.UpstreamFormat, c.DefaultModel))
@@ -36,3 +37,4 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(b.String()))
 }
+

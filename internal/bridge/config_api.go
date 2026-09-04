@@ -30,39 +30,39 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) configView(c *Config) map[string]any {
 	return map[string]any{
-		"host":                     c.Host,
-		"port":                     c.Port,
-		"upstream_base_url":        c.UpstreamBaseURL,
-		"upstream_format":          string(c.UpstreamFormat),
-		"upstream_api_key_set":     c.UpstreamAPIKey != "",
-		"upstream_api_key_masked":  logx.Redact(c.UpstreamAPIKey),
-		"auth_token_set":           c.AuthToken != "",
-		"default_model":            c.DefaultModel,
-		"model_map":                ModelMapString(c.ModelMap),
-		"default_max_tokens":       c.DefaultMaxTokens,
-		"stream_idle_ping_seconds": int(c.StreamIdlePing / time.Second),
-		"request_timeout_seconds":  int(c.RequestTimeout / time.Second),
-		"log_level":                logx.LevelName(c.LogLevel),
-		"log_format":               c.LogFormat,
-		"log_bodies":               c.LogBodies,
-		"env_path":                 c.EnvPath,
+		"host":                        c.Host,
+		"port":                        c.Port,
+		"upstream_base_url":           c.UpstreamBaseURL,
+		"upstream_format":             string(c.UpstreamFormat),
+		"upstream_api_key_set":        c.UpstreamAPIKey != "",
+		"upstream_api_key_masked":     logx.Redact(c.UpstreamAPIKey),
+		"auth_token_set":              c.AuthToken != "",
+		"default_model":               c.DefaultModel,
+		"model_map":                   ModelMapString(c.ModelMap),
+		"default_max_tokens":          c.DefaultMaxTokens,
+		"stream_idle_ping_seconds":    int(c.StreamIdlePing / time.Second),
+		"request_timeout_seconds":     int(c.RequestTimeout / time.Second),
+		"log_level":                   logx.LevelName(c.LogLevel),
+		"log_format":                  c.LogFormat,
+		"log_bodies":                  c.LogBodies,
+		"env_path":                    c.EnvPath,
 	}
 }
 
 type configUpdate struct {
-	UpstreamBaseURL  *string `json:"upstream_base_url"`
-	UpstreamFormat   *string `json:"upstream_format"`
-	UpstreamAPIKey   *string `json:"upstream_api_key"`
-	AuthToken        *string `json:"auth_token"`
-	DefaultModel     *string `json:"default_model"`
-	ModelMap         *string `json:"model_map"`
-	DefaultMaxTokens *int    `json:"default_max_tokens"`
-	StreamIdlePing   *int    `json:"stream_idle_ping_seconds"`
-	RequestTimeout   *int    `json:"request_timeout_seconds"`
-	LogLevel         *string `json:"log_level"`
-	LogFormat        *string `json:"log_format"`
-	LogBodies        *bool   `json:"log_bodies"`
-	Persist          bool    `json:"persist"`
+	UpstreamBaseURL       *string `json:"upstream_base_url"`
+	UpstreamFormat        *string `json:"upstream_format"`
+	UpstreamAPIKey        *string `json:"upstream_api_key"`
+	AuthToken             *string `json:"auth_token"`
+	DefaultModel          *string `json:"default_model"`
+	ModelMap              *string `json:"model_map"`
+	DefaultMaxTokens      *int    `json:"default_max_tokens"`
+	StreamIdlePing        *int    `json:"stream_idle_ping_seconds"`
+	RequestTimeout        *int    `json:"request_timeout_seconds"`
+	LogLevel              *string `json:"log_level"`
+	LogFormat             *string `json:"log_format"`
+	LogBodies             *bool   `json:"log_bodies"`
+	Persist               bool    `json:"persist"`
 }
 
 func (s *Server) applyConfig(w http.ResponseWriter, r *http.Request) {
@@ -91,7 +91,7 @@ func (s *Server) applyConfig(w http.ResponseWriter, r *http.Request) {
 		next.UpstreamFormat = f
 	}
 	// Only overwrite the upstream key when a non-empty value is supplied, so a
-	// blank dashboard field never wipes a working key.
+	// blank field never wipes a working key.
 	if upd.UpstreamAPIKey != nil && strings.TrimSpace(*upd.UpstreamAPIKey) != "" {
 		next.UpstreamAPIKey = strings.TrimSpace(*upd.UpstreamAPIKey)
 	}
@@ -130,7 +130,7 @@ func (s *Server) applyConfig(w http.ResponseWriter, r *http.Request) {
 
 	s.setConfig(next)
 	logx.SetLevel(next.LogLevel)
-	logx.Info("config updated via dashboard (upstream=%s format=%s persist=%t)", next.UpstreamBaseURL, next.UpstreamFormat, upd.Persist)
+	logx.Info("config updated (upstream=%s format=%s persist=%t)", next.UpstreamBaseURL, next.UpstreamFormat, upd.Persist)
 
 	saved := false
 	var saveErr string

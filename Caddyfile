@@ -1,0 +1,9 @@
+{$WEB_HOST} {
+  encode zstd gzip
+  reverse_proxy web:3000
+}
+
+{$RELAY_HOST} {
+  encode zstd gzip
+  reverse_proxy relay:8080
+}

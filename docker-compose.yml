@@ -1,23 +1,85 @@
 services:
-  claude-proxy:
-    build: .
-    image: claude-proxy:latest
-    container_name: claude-proxy
-    ports:
-      - "3001:3001"
+  relay:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: claude-proxy-relay:latest
+    restart: unless-stopped
     environment:
-      HOST: 0.0.0.0
-      PORT: 3001
-      UPSTREAM_BASE_URL: https://gorouter.app
-      UPSTREAM_FORMAT: anthropic
-      UPSTREAM_API_KEY: ${UPSTREAM_API_KEY:?set UPSTREAM_API_KEY in your shell or .env}
+      RELAY_ADDR: :43211
+      RELAY_DATA_DIR: /data
+      RELAY_TOKEN_SECRET: ${RELAY_TOKEN_SECRET:?set RELAY_TOKEN_SECRET}
+      RELAY_DB_KEY: ${RELAY_DB_KEY:?set RELAY_DB_KEY}
+      RELAY_ADMIN_TOKEN: ${RELAY_ADMIN_TOKEN:?set RELAY_ADMIN_TOKEN}
+      UPSTREAM_BASE_URL: ${UPSTREAM_BASE_URL:?set UPSTREAM_BASE_URL}
+      UPSTREAM_FORMAT: ${UPSTREAM_FORMAT:-anthropic}
+      UPSTREAM_API_KEY: ${UPSTREAM_API_KEY:-}
       AUTH_TOKEN: ${AUTH_TOKEN:-}
       DEFAULT_MODEL: ${DEFAULT_MODEL:-claude-opus-4-8}
+      MODEL_MAP: ${MODEL_MAP:-}
+      DEFAULT_MAX_TOKENS: ${DEFAULT_MAX_TOKENS:-4096}
+      STREAM_IDLE_PING_SECONDS: ${STREAM_IDLE_PING_SECONDS:-15}
+      TIMEOUT: ${TIMEOUT:-0}
+      DEFAULT_QUOTA_CENTS: ${DEFAULT_QUOTA_CENTS:-7000}
       LOG_LEVEL: ${LOG_LEVEL:-info}
-    restart: unless-stopped
+      LOG_FORMAT: ${LOG_FORMAT:-text}
+      LOG_BODIES: ${LOG_BODIES:-false}
+    volumes:
+      - relay_data:/data
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/health"]
+      test: ["CMD", "/app/claude-relay", "licenses"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 5s
+      start_period: 10s
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    image: claude-proxy-web:latest
+    restart: unless-stopped
+    environment:
+      PORT: 8090
+      RELAY_BASE_URL: http://relay:43211
+      RELAY_ADMIN_TOKEN: ${RELAY_ADMIN_TOKEN:?set RELAY_ADMIN_TOKEN}
+      ADMIN_USER: ${ADMIN_USER:?set ADMIN_USER}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:?set ADMIN_PASSWORD_HASH}
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      TRUST_PROXY: ${TRUST_PROXY:-true}
+    depends_on:
+      relay:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8090/login"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      # The Caddyfile requests a certificate for each of these, so both must
+      # already resolve to this host.
+      WEB_HOST: ${WEB_HOST:?set WEB_HOST}
+      RELAY_HOST: ${RELAY_HOST:?set RELAY_HOST}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+      relay:
+        condition: service_healthy
+
+volumes:
+  relay_data:
+  caddy_data:
+  caddy_config:

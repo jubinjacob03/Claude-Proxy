@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -63,53 +64,54 @@ const (
 
 // SetFormat switches the log line format between text and JSON.
 func SetFormat(name string) {
-	mu.Lock()
 	if strings.EqualFold(strings.TrimSpace(name), "json") {
-		outputFormat = FormatJSON
+		formatValue.Store(int32(FormatJSON))
 	} else {
-		outputFormat = FormatText
+		formatValue.Store(int32(FormatText))
 	}
-	mu.Unlock()
 }
 
 var (
-	mu           sync.Mutex
-	level        = LevelInfo
-	outputFormat = FormatText
+	writeMu     sync.Mutex
+	levelValue  atomic.Int32
+	formatValue atomic.Int32
 )
 
+func init() {
+	levelValue.Store(int32(LevelInfo))
+	formatValue.Store(int32(FormatText))
+}
+
 func SetLevel(l Level) {
-	mu.Lock()
-	level = l
-	mu.Unlock()
+	levelValue.Store(int32(l))
 }
 
 func Enabled(l Level) bool {
-	mu.Lock()
-	defer mu.Unlock()
-	return l >= level && level != LevelOff
+	current := Level(levelValue.Load())
+	return l >= current && current != LevelOff
 }
 
 func logf(l Level, tag, format string, args ...any) {
 	if !Enabled(l) {
 		return
 	}
+	now := time.Now()
 	msg := fmt.Sprintf(format, args...)
 
-	mu.Lock()
-	defer mu.Unlock()
-
 	var line string
-	if outputFormat == FormatJSON {
+	if Format(formatValue.Load()) == FormatJSON {
 		b, _ := json.Marshal(map[string]string{
-			"ts":    time.Now().Format(time.RFC3339Nano),
+			"ts":    now.Format(time.RFC3339Nano),
 			"level": strings.ToLower(tag),
 			"msg":   msg,
 		})
 		line = string(b) + "\n"
 	} else {
-		line = fmt.Sprintf("%s %-5s %s\n", time.Now().Format("15:04:05.000"), tag, msg)
+		line = fmt.Sprintf("%s %-5s %s\n", now.Format("15:04:05.000"), tag, msg)
 	}
+
+	writeMu.Lock()
+	defer writeMu.Unlock()
 
 	if l >= LevelWarn {
 		_, _ = os.Stderr.WriteString(line)

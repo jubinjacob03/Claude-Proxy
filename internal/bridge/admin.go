@@ -49,6 +49,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"stream_idle_ping_seconds": int(c.StreamIdlePing / time.Second),
 		"request_timeout_seconds":  int(c.RequestTimeout / time.Second),
 		"total_requests":           s.totalRequests.Load(),
+		"requests_served":          s.totalRequests.Load(),
 		"total_clients":            len(s.snapshotClients()),
 	})
 }
@@ -56,11 +57,14 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
 	c := s.cfg()
 	writeJSON(w, http.StatusOK, map[string]any{
-		"mode":           string(c.UpstreamFormat),
-		"version":        s.version,
-		"uptime_seconds": int(time.Since(s.startTime).Seconds()),
-		"total_clients":  len(s.snapshotClients()),
-		"total_requests": s.totalRequests.Load(),
+		"mode":               string(c.UpstreamFormat),
+		"version":            s.version,
+		"uptime_seconds":     int(time.Since(s.startTime).Seconds()),
+		"total_clients":      len(s.snapshotClients()),
+		"total_requests":     s.totalRequests.Load(),
+		"requests_served":    s.totalRequests.Load(),
+		"successful_streams": s.streamCount.Load(),
+		"upstream_errors":    s.upstreamErrors.Load(),
 	})
 }
 
