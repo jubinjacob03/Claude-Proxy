@@ -1019,7 +1019,7 @@ func largestPNGFrame(iconData []byte) ([]byte, bool) {
 func waitProxyReady(dir string, timeout time.Duration) {
 	port := getEnvValue(filepath.Join(dir, envFileName), "PORT")
 	if port == "" {
-		port = "3001"
+		port = "3009"
 	}
 	endpoint := "http://127.0.0.1:" + port + "/health"
 	client := &http.Client{Timeout: 1500 * time.Millisecond}

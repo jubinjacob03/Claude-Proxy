@@ -361,14 +361,14 @@ func TestCORSIsNotReflectedToRemoteOrigins(t *testing.T) {
 
 	// A loopback origin is still allowed.
 	req, _ = http.NewRequest(http.MethodOptions, br.URL+"/config", nil)
-	req.Header.Set("Origin", "http://127.0.0.1:3001")
+	req.Header.Set("Origin", "http://127.0.0.1:3009")
 	req.Header.Set("Access-Control-Request-Method", "POST")
 	resp2, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("preflight: %v", err)
 	}
 	defer resp2.Body.Close()
-	if got := resp2.Header.Get("Access-Control-Allow-Origin"); got != "http://127.0.0.1:3001" {
+	if got := resp2.Header.Get("Access-Control-Allow-Origin"); got != "http://127.0.0.1:3009" {
 		t.Errorf("loopback origin should be allowed, got %q", got)
 	}
 }

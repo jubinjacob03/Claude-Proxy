@@ -22,7 +22,7 @@ Copy-Item .env.example .env
 Set these client values in `.env`:
 - `RELAY_BASE_URL` — hosted relay base URL
 - `LICENSE_KEY` — licence key issued by the admin panel
-- `HOST` / `PORT` — local proxy bind address, default `127.0.0.1:3001`
+- `HOST` / `PORT` — local proxy bind address, default `127.0.0.1:3009`
 - `AUTH_TOKEN` — optional local client auth token
 
 The first successful launch activates the machine and writes `license.json` next to the executable. The tray app can show licence status from that cached activation.
@@ -72,7 +72,7 @@ The repository now ships a two-service stack:
 Current public deployment:
 - Web admin panel: `http://68.233.112.166:3005`
 - Relay base URL: `http://68.233.112.166:43219`
-- Local client proxy default bind: `127.0.0.1:3001`
+- Local client proxy default bind: `127.0.0.1:3009`
 
 Example:
 

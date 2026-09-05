@@ -115,13 +115,13 @@ func TestIsLoopbackOriginRejectsRemoteSites(t *testing.T) {
 	// A reflected Origin would let any site you visit drive the proxy from your
 	// browser, so only loopback origins may be echoed.
 	allowed := []string{
-		"http://localhost:3001", "http://127.0.0.1:3001",
-		"https://localhost", "http://[::1]:8080", "http://127.0.0.2:3001",
+		"http://localhost:3009", "http://127.0.0.1:3009",
+		"https://localhost", "http://[::1]:8080", "http://127.0.0.2:3009",
 	}
 	denied := []string{
-		"https://evil.example", "http://attacker.test:3001",
+		"https://evil.example", "http://attacker.test:3009",
 		"http://169.254.169.254", "http://localhost.evil.com", "", "not-a-url",
-		"http://10.0.0.5:3001",
+		"http://10.0.0.5:3009",
 	}
 
 	for _, o := range allowed {

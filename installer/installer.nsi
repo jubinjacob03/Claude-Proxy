@@ -9,7 +9,7 @@ SetCompressor /SOLID lzma
 !define APP_NAME    "Claude Proxy"
 !define APP_ID      "Claude-Proxy"
 !define PUBLISHER   "Jubin"
-!define APP_VERSION "2.1.1"
+!define APP_VERSION "2.1.2"
 !define TRAY_EXE    "claude-tray.exe"
 !define PROXY_EXE   "claude-proxy.exe"
 !define UNINST_KEY  "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_ID}"
@@ -48,7 +48,7 @@ Page custom KeyPageCreate KeyPageLeave
 
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${TRAY_EXE}"
 !define MUI_FINISHPAGE_RUN_TEXT "Start ${APP_NAME} now"
-!define MUI_FINISHPAGE_TEXT "${APP_NAME} is installed and will start automatically every time you log in.$\r$\n$\r$\nDefault endpoints:$\r$\n    Anthropic   http://127.0.0.1:3001$\r$\n    OpenAI      http://127.0.0.1:3001/v1$\r$\n$\r$\nYour licence is bound to this computer on first use. Use the tray menu for Monitor Logs and settings."
+!define MUI_FINISHPAGE_TEXT "${APP_NAME} is installed and will start automatically every time you log in.$\r$\n$\r$\nDefault endpoints:$\r$\n    Anthropic   http://127.0.0.1:3009$\r$\n    OpenAI      http://127.0.0.1:3009/v1$\r$\n$\r$\nYour licence is bound to this computer on first use. Use the tray menu for Monitor Logs and settings."
 !insertmacro MUI_PAGE_FINISH
 
 !insertmacro MUI_UNPAGE_CONFIRM
@@ -296,7 +296,7 @@ Function WriteEnv
     Return
   ${EndIf}
   FileWrite $0 "HOST=127.0.0.1$\r$\n"
-  FileWrite $0 "PORT=3001$\r$\n"
+  FileWrite $0 "PORT=3009$\r$\n"
   FileWrite $0 "RELAY_BASE_URL=http://68.233.112.166:43219$\r$\n"
   FileWrite $0 "LICENSE_KEY=$LicenseKey$\r$\n"
   FileWrite $0 "UPSTREAM_FORMAT=anthropic$\r$\n"
