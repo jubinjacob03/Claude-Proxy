@@ -52,13 +52,6 @@ func (s *Server) forward(w http.ResponseWriter, r *http.Request, baseURL string,
 		writeUpstreamError(w, r, http.StatusBadGateway, "upstream request failed")
 		return 0
 	}
-	if shouldRetirePoolKey(resp.StatusCode) {
-		if err := s.store.SetPoolKeyActive(poolKey.ID, false); err != nil {
-			logx.Error("retire pool key %s failed: %v", poolKey.ID, err)
-		} else {
-			logx.Warn("retired pool key %s after upstream status %d", poolKey.ID, resp.StatusCode)
-		}
-	}
 	defer resp.Body.Close()
 
 	ct := resp.Header.Get("Content-Type")
@@ -169,8 +162,4 @@ func openAIErrorType(status int) string {
 	default:
 		return "api_error"
 	}
-}
-
-func shouldRetirePoolKey(status int) bool {
-	return status == http.StatusUnauthorized || status == http.StatusForbidden || status == http.StatusPaymentRequired
 }

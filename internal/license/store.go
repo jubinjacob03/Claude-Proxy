@@ -544,7 +544,7 @@ func (s *Store) TopUpPoolKey(id string, amount Money) error {
 	if amount <= 0 {
 		return errors.New("top-up amount must be positive")
 	}
-	return s.affectOne(`UPDATE pool_keys SET balance_cents = balance_cents + ?, active = 1, exhausted_at = NULL WHERE id = ?`, int64(amount), id)
+	return s.affectOne(`UPDATE pool_keys SET balance_cents = balance_cents + ?, exhausted_at = NULL WHERE id = ?`, int64(amount), id)
 }
 
 func (s *Store) RotatePoolKey(id, label, secret string, balance Money) (*PoolKey, error) {
@@ -567,7 +567,29 @@ func (s *Store) RotatePoolKey(id, label, secret string, balance Money) (*PoolKey
 }
 
 func (s *Store) SetPoolKeyActive(id string, active bool) error {
-	return s.affectOne(`UPDATE pool_keys SET active = ? WHERE id = ?`, boolToInt(active), id)
+	if !active {
+		return s.affectOne(`UPDATE pool_keys SET active = 0 WHERE id = ?`, id)
+	}
+	key, err := s.GetPoolKey(id)
+	if err != nil {
+		return err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`UPDATE pool_keys SET active = 0 WHERE provider = ? AND pool_group = ?`, key.Provider, key.PoolGroup); err != nil {
+		return err
+	}
+	res, err := tx.Exec(`UPDATE pool_keys SET active = 1 WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return tx.Commit()
 }
 
 func (s *Store) RemovePoolKey(id string) error {
