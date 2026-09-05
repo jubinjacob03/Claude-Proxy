@@ -2,10 +2,12 @@ package bridge
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -101,9 +103,30 @@ func (s *Server) Run() error {
 }
 
 func (s *Server) banner(c *Config) {
-	logx.Info("claude-proxy %s", s.version)
-	logx.Info("  listening:  http://%s", c.Addr())
-	logx.Info("  upstream:   %s (%s)", c.UpstreamBaseURL, c.UpstreamFormat)
-	logx.Info("  auth token: %s", logx.Redact(c.AuthToken))
-	logx.Info("  upstream key: %s", logx.Redact(c.UpstreamAPIKey))
+	port := c.Addr()
+	if strings.HasPrefix(port, ":") {
+		port = "localhost" + port
+	} else if strings.HasPrefix(port, "0.0.0.0:") {
+		port = "localhost" + port[7:]
+	}
+	
+	authToken := c.AuthToken
+	if authToken == "" {
+		authToken = "(none)"
+	} else if authToken == "Jubin" {
+		authToken = "Jubin or unlimited"
+	}
+	
+	fmt.Printf("\n")
+	fmt.Printf("+-------------------------------------------------------------+\n")
+	fmt.Printf("| Claude Proxy by J - ready                                          |\n")
+	fmt.Printf("+-------------------------------------------------------------+\n")
+	fmt.Printf("| Listening       %-43s |\n", c.Addr())
+	fmt.Printf("| Health          %-43s |\n", "http://"+port+"/health")
+	fmt.Printf("| OpenAI API      %-43s |\n", "http://"+port+"/v1/chat/completions")
+	fmt.Printf("| Anthropic API   %-43s |\n", "http://"+port+"/v1/messages")
+	fmt.Printf("| Auth token      %-43s |\n", authToken)
+	fmt.Printf("| Relay URL       %-43s |\n", c.UpstreamBaseURL)
+	fmt.Printf("| Log level       %-43s |\n", logx.LevelName(c.LogLevel))
+	fmt.Printf("+-------------------------------------------------------------+\n")
 }
