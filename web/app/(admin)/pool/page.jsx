@@ -1,4 +1,5 @@
 import { Wallet, ServerOff, KeyRound } from "lucide-react";
+import Link from "next/link";
 import { relay } from "@/lib/relay";
 import { formatCents, formatDateTime } from "@/lib/format";
 import {
@@ -28,11 +29,13 @@ import TopUpPoolKeyForm from "./TopUpPoolKeyForm";
 import MotionRow from "@/components/motion/MotionRow";
 import { UpstreamSpendButton } from "./UpstreamSpendButton";
 
-export default async function PoolPage() {
+export default async function PoolPage(props) {
+  const searchParams = await props.searchParams || {};
   const [{ pool }, { profiles }] = await Promise.all([
     relay.listPool(),
     relay.listEndpointProfiles(),
   ]);
+  const editProfile = profiles.find((p) => p.name === searchParams.edit) || null;
   const activeProfile = profiles.find((profile) => profile.active) || null;
   const activePoolGroup = activeProfile?.pool_group || "default";
   const poolGroups = [
@@ -70,7 +73,7 @@ export default async function PoolPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <EndpointProfileForm />
+          <EndpointProfileForm profile={editProfile} />
           <div className="mt-5 overflow-auto rounded-xl border border-white/5">
             <table className="w-full min-w-[760px] text-left text-sm">
               <thead className="sticky top-0 z-10 bg-[#1e1e1e]/95 text-xs uppercase tracking-wider text-neutral-500 backdrop-blur">
@@ -108,6 +111,9 @@ export default async function PoolPage() {
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex flex-wrap gap-2">
+                        <Button variant="secondary" size="sm" asChild>
+                          <Link href={`?edit=${profile.name}`} scroll={false}>Edit</Link>
+                        </Button>
                         <form
                           action={activateEndpointProfileAction.bind(
                             null,

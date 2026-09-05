@@ -111,6 +111,7 @@ export async function saveEndpointProfileAction(formData) {
 
   await relay.saveEndpointProfile(name, claudeBaseURL, poolGroup, active, billingMode, perRequestCostCents, inputCostPerM, outputCostPerM);
   revalidatePath("/pool");
+  redirect("/pool");
 }
 
 export async function activateEndpointProfileAction(name) {
