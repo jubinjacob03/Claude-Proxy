@@ -22,22 +22,40 @@ export async function mintLicenseAction(_prevState, formData) {
 
   const { created } = await relay.createLicenses(cents, note, count);
   revalidatePath("/licenses");
-  return { error: null, created };
+  return { error: null, success: true, created };
 }
 
 export async function pauseLicenseAction(id) {
-  await relay.pauseLicense(id);
-  revalidatePath("/licenses");
+  try {
+    await relay.pauseLicense(id);
+    revalidatePath("/licenses");
+    return { success: true, error: null };
+  } catch (err) {
+    if (err.message === "NEXT_REDIRECT") throw err;
+    return { error: err.message || "Failed to pause license." };
+  }
 }
 
 export async function resumeLicenseAction(id) {
-  await relay.resumeLicense(id);
-  revalidatePath("/licenses");
+  try {
+    await relay.resumeLicense(id);
+    revalidatePath("/licenses");
+    return { success: true, error: null };
+  } catch (err) {
+    if (err.message === "NEXT_REDIRECT") throw err;
+    return { error: err.message || "Failed to resume license." };
+  }
 }
 
 export async function resetHwidAction(id) {
-  await relay.resetHwid(id);
-  revalidatePath("/licenses");
+  try {
+    await relay.resetHwid(id);
+    revalidatePath("/licenses");
+    return { success: true, error: null };
+  } catch (err) {
+    if (err.message === "NEXT_REDIRECT") throw err;
+    return { error: err.message || "Failed to reset HWID." };
+  }
 }
 
 export async function setQuotaAction(id, formData) {
@@ -45,8 +63,14 @@ export async function setQuotaAction(id, formData) {
     String(formData.get("quota_dollars") || ""),
   );
   if (!cents) return;
-  await relay.setQuota(id, cents);
-  revalidatePath("/licenses");
+  try {
+    await relay.setQuota(id, cents);
+    revalidatePath("/licenses");
+    return { success: true, error: null };
+  } catch (err) {
+    if (err.message === "NEXT_REDIRECT") throw err;
+    return { error: err.message || "Failed to set quota." };
+  }
 }
 
 export async function addPoolKeyAction(formData) {
@@ -84,18 +108,36 @@ export async function rotatePoolKeyAction(id, formData) {
 }
 
 export async function enablePoolKeyAction(id) {
-  await relay.enablePoolKey(id);
-  revalidatePath("/pool");
+  try {
+    await relay.enablePoolKey(id);
+    revalidatePath("/pool");
+    return { success: true, error: null };
+  } catch (err) {
+    if (err.message === "NEXT_REDIRECT") throw err;
+    return { error: err.message || "Failed to enable key." };
+  }
 }
 
 export async function disablePoolKeyAction(id) {
-  await relay.disablePoolKey(id);
-  revalidatePath("/pool");
+  try {
+    await relay.disablePoolKey(id);
+    revalidatePath("/pool");
+    return { success: true, error: null };
+  } catch (err) {
+    if (err.message === "NEXT_REDIRECT") throw err;
+    return { error: err.message || "Failed to disable key." };
+  }
 }
 
 export async function deletePoolKeyAction(id) {
-  await relay.deletePoolKey(id);
-  revalidatePath("/pool");
+  try {
+    await relay.deletePoolKey(id);
+    revalidatePath("/pool");
+    return { success: true, error: null };
+  } catch (err) {
+    if (err.message === "NEXT_REDIRECT") throw err;
+    return { error: err.message || "Failed to delete key." };
+  }
 }
 
 export async function saveEndpointProfileAction(formData) {
@@ -115,13 +157,25 @@ export async function saveEndpointProfileAction(formData) {
 }
 
 export async function activateEndpointProfileAction(name) {
-  await relay.activateEndpointProfile(name);
-  revalidatePath("/pool");
+  try {
+    await relay.activateEndpointProfile(name);
+    revalidatePath("/pool");
+    return { success: true, error: null };
+  } catch (err) {
+    if (err.message === "NEXT_REDIRECT") throw err;
+    return { error: err.message || "Failed to activate profile." };
+  }
 }
 
 export async function deleteEndpointProfileAction(name) {
-  await relay.deleteEndpointProfile(name);
-  revalidatePath("/pool");
+  try {
+    await relay.deleteEndpointProfile(name);
+    revalidatePath("/pool");
+    return { success: true, error: null };
+  } catch (err) {
+    if (err.message === "NEXT_REDIRECT") throw err;
+    return { error: err.message || "Failed to delete profile." };
+  }
 }
 
 export async function getUpstreamUsageAction(id) {

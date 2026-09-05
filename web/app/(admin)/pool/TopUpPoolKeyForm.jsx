@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { topUpPoolKeyAction } from "../actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useActionToast } from "@/components/toast/ToastProvider";
 
 const initialState = { error: null };
 
@@ -12,13 +13,14 @@ export default function TopUpPoolKeyForm({ id }) {
     async (_prevState, formData) => {
       try {
         await topUpPoolKeyAction(id, formData);
-        return { error: null };
+        return { error: null, success: true };
       } catch (error) {
         return { error: error.message || "Top-up failed." };
       }
     },
     initialState,
   );
+  useActionToast(state, "Balance topped up successfully");
 
   return (
     <form action={formAction} className="flex flex-wrap items-center gap-2">

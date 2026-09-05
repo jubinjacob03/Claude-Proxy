@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import MintForm from "./MintForm";
 import CopyButton from "@/components/CopyButton";
 import MotionRow from "@/components/motion/MotionRow";
+import { ActionForm } from "@/components/ActionForm";
 
 function HwidCell({ bound, hwid }) {
   if (!bound) {
@@ -110,24 +111,29 @@ export default async function LicensesPage() {
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex flex-wrap gap-2">
-                        <form
+                        <ActionForm
                           action={
                             l.active
                               ? pauseLicenseAction.bind(null, l.id)
                               : resumeLicenseAction.bind(null, l.id)
                           }
+                          successMessage={l.active ? "License paused" : "License resumed"}
                         >
                           <Button type="submit" variant="secondary" size="sm">
                             {l.active ? "Pause" : "Resume"}
                           </Button>
-                        </form>
-                        <form action={resetHwidAction.bind(null, l.id)}>
+                        </ActionForm>
+                        <ActionForm
+                          action={resetHwidAction.bind(null, l.id)}
+                          successMessage="HWID reset"
+                        >
                           <Button type="submit" variant="outline" size="sm">
                             Reset HWID
                           </Button>
-                        </form>
-                        <form
+                        </ActionForm>
+                        <ActionForm
                           action={setQuotaAction.bind(null, l.id)}
+                          successMessage="Quota set"
                           className="flex items-center gap-1.5"
                         >
                           <Input
@@ -141,7 +147,7 @@ export default async function LicensesPage() {
                           <Button type="submit" variant="ghost" size="sm">
                             Set
                           </Button>
-                        </form>
+                        </ActionForm>
                       </div>
                     </td>
                   </MotionRow>

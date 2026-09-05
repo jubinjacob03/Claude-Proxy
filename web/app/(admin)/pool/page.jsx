@@ -28,6 +28,7 @@ import RotatePoolKeyForm from "./RotatePoolKeyForm";
 import TopUpPoolKeyForm from "./TopUpPoolKeyForm";
 import MotionRow from "@/components/motion/MotionRow";
 import { UpstreamSpendButton } from "./UpstreamSpendButton";
+import { ActionForm } from "@/components/ActionForm";
 
 export default async function PoolPage(props) {
   const searchParams = await props.searchParams || {};
@@ -114,21 +115,23 @@ export default async function PoolPage(props) {
                         <Button variant="secondary" size="sm" asChild>
                           <Link href={`?edit=${profile.name}`} scroll={false}>Edit</Link>
                         </Button>
-                        <form
+                        <ActionForm
                           action={activateEndpointProfileAction.bind(
                             null,
                             profile.name,
                           )}
+                          successMessage="Base URL activated"
                         >
                           <Button type="submit" variant="secondary" size="sm">
                             Activate
                           </Button>
-                        </form>
-                        <form
+                        </ActionForm>
+                        <ActionForm
                           action={deleteEndpointProfileAction.bind(
                             null,
                             profile.name,
                           )}
+                          successMessage="Base URL deleted"
                         >
                           <ConfirmButton
                             type="submit"
@@ -138,7 +141,7 @@ export default async function PoolPage(props) {
                           >
                             Delete
                           </ConfirmButton>
-                        </form>
+                        </ActionForm>
                       </div>
                     </td>
                   </MotionRow>
@@ -270,12 +273,13 @@ export default async function PoolPage(props) {
                             </td>
                             <td className="px-3 py-3">
                               <div className="flex flex-wrap gap-2">
-                                <form
+                                <ActionForm
                                   action={
                                     k.active
                                       ? disablePoolKeyAction.bind(null, k.id)
                                       : enablePoolKeyAction.bind(null, k.id)
                                   }
+                                  successMessage={k.active ? "Key disabled" : "Key enabled"}
                                 >
                                   <Button
                                     type="submit"
@@ -284,9 +288,10 @@ export default async function PoolPage(props) {
                                   >
                                     {k.active ? "Disable" : "Enable"}
                                   </Button>
-                                </form>
-                                <form
+                                </ActionForm>
+                                <ActionForm
                                   action={deletePoolKeyAction.bind(null, k.id)}
+                                  successMessage="Key deleted"
                                 >
                                   <ConfirmButton
                                     type="submit"
@@ -296,7 +301,7 @@ export default async function PoolPage(props) {
                                   >
                                     Delete
                                   </ConfirmButton>
-                                </form>
+                                </ActionForm>
                               </div>
                             </td>
                           </MotionRow>

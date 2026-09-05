@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
+import { useActionToast } from "@/components/toast/ToastProvider";
 
 const initialState = { error: null };
 
@@ -14,13 +15,16 @@ export default function EndpointProfileForm({ profile }) {
     async (_prevState, formData) => {
       try {
         await saveEndpointProfileAction(formData);
-        return { error: null };
+        return { error: null, success: true };
       } catch (error) {
+        if (error.message === "NEXT_REDIRECT") throw error;
         return { error: error.message || "Failed to save endpoint profile." };
       }
     },
     initialState,
   );
+
+  useActionToast(state, profile ? "Base URL updated" : "Base URL created");
 
   const [billingMode, setBillingMode] = useState(profile?.billing_mode || "per_request");
 
