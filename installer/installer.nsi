@@ -9,7 +9,7 @@ SetCompressor /SOLID lzma
 !define APP_NAME    "Claude Proxy"
 !define APP_ID      "Claude-Proxy"
 !define PUBLISHER   "Jubin"
-!define APP_VERSION "2.1.2"
+!define APP_VERSION "2.1.3"
 !define TRAY_EXE    "claude-tray.exe"
 !define PROXY_EXE   "claude-proxy.exe"
 !define UNINST_KEY  "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_ID}"

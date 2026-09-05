@@ -147,9 +147,6 @@ jobs:
 
           gh release view $tag *> $null
           if ($LASTEXITCODE -eq 0) {
-            if ($env:GITHUB_EVENT_NAME -ne 'workflow_dispatch') {
-              throw "Release $tag already exists. Bump APP_VERSION in installer/installer.nsi, or re-run manually via workflow_dispatch to overwrite."
-            }
             Write-Host "Release $tag exists; updating notes and re-uploading assets."
             gh release edit $tag --title "Claude Proxy $tag" --notes-file release-notes.md --latest
             if ($LASTEXITCODE -ne 0) { throw "gh release edit failed" }
