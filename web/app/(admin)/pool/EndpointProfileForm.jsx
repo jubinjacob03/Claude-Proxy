@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { useActionToast } from "@/components/toast/ToastProvider";
+import { ChevronDown } from "lucide-react";
 
 const initialState = { error: null };
 
@@ -63,16 +64,19 @@ export default function EndpointProfileForm({ profile }) {
       <div className="sm:col-span-5 grid gap-4 sm:grid-cols-4 p-4 bg-neutral-900 rounded-lg border border-neutral-800">
         <div className="flex flex-col gap-2">
           <Label htmlFor="billing_mode">Billing mode</Label>
-          <select
-            id="billing_mode"
-            name="billing_mode"
-            value={billingMode}
-            onChange={(e) => setBillingMode(e.target.value)}
-            className="flex h-9 w-full rounded-md border border-neutral-800 bg-neutral-950 px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <option value="per_request">Per Request</option>
-            <option value="token_based">Token Based</option>
-          </select>
+          <div className="relative">
+            <select
+              id="billing_mode"
+              name="billing_mode"
+              value={billingMode}
+              onChange={(e) => setBillingMode(e.target.value)}
+              className="appearance-none w-full h-11 rounded-xl border border-primary/15 bg-black/40 pl-3 pr-8 text-sm text-white outline-none focus:border-primary/70"
+            >
+              <option value="per_request" className="bg-[#1e1e1e]">Per Request</option>
+              <option value="token_based" className="bg-[#1e1e1e]">Token Based</option>
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-neutral-500" />
+          </div>
         </div>
 
         {billingMode === "per_request" ? (

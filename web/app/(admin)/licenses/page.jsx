@@ -76,7 +76,7 @@ export default async function LicensesPage() {
                   <th className="px-3 py-3">Key</th>
                   <th className="px-3 py-3">Status</th>
                   <th className="px-3 py-3">Machine</th>
-                  <th className="px-3 py-3">Balance</th>
+                  <th className="px-3 py-3">Usage</th>
                   <th className="px-3 py-3">Note</th>
                   <th className="px-3 py-3">Created</th>
                   <th className="px-3 py-3">Actions</th>
@@ -88,7 +88,7 @@ export default async function LicensesPage() {
                     <td className="px-3 py-3 font-mono text-xs">
                       <div className="flex items-center gap-2">
                         {l.raw_key ? l.raw_key : l.key_hint}
-                        {l.raw_key ? <CopyButton value={l.raw_key} /> : null}
+                        <CopyButton value={l.raw_key || l.key_hint} />
                       </div>
                     </td>
                     <td className="px-3 py-3">
