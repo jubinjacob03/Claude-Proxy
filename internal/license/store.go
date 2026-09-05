@@ -58,23 +58,29 @@ CREATE TABLE IF NOT EXISTS pool_keys (
 );
 
 CREATE TABLE IF NOT EXISTS endpoint_profiles (
-	name             TEXT PRIMARY KEY,
-	claude_base_url  TEXT NOT NULL,
-	pool_group       TEXT NOT NULL DEFAULT 'default',
-	active           INTEGER NOT NULL DEFAULT 0,
-	created_at       TEXT NOT NULL
+	name                   TEXT PRIMARY KEY,
+	claude_base_url        TEXT NOT NULL,
+	pool_group             TEXT NOT NULL DEFAULT 'default',
+	active                 INTEGER NOT NULL DEFAULT 0,
+	created_at             TEXT NOT NULL,
+	billing_mode           TEXT NOT NULL DEFAULT 'per_request',
+	per_request_cost_cents INTEGER NOT NULL DEFAULT 30,
+	input_cost_per_m       INTEGER NOT NULL DEFAULT 0,
+	output_cost_per_m      INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS usage_events (
-  id           TEXT PRIMARY KEY,
-  license_id   TEXT NOT NULL,
-  pool_key_id  TEXT NOT NULL,
-  provider     TEXT NOT NULL,
-  model        TEXT NOT NULL,
-  cost_cents   INTEGER NOT NULL,
-  streamed     INTEGER NOT NULL,
-  status_code  INTEGER NOT NULL,
-  created_at   TEXT NOT NULL
+  id            TEXT PRIMARY KEY,
+  license_id    TEXT NOT NULL,
+  pool_key_id   TEXT NOT NULL,
+  provider      TEXT NOT NULL,
+  model         TEXT NOT NULL,
+  cost_cents    INTEGER NOT NULL,
+  input_tokens  INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  streamed      INTEGER NOT NULL,
+  status_code   INTEGER NOT NULL,
+  created_at    TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_usage_license ON usage_events(license_id, created_at);
@@ -129,6 +135,12 @@ func runMigrations(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_pool_pick ON pool_keys(provider, pool_group, active)`,
 		`CREATE INDEX IF NOT EXISTS idx_endpoint_active ON endpoint_profiles(active)`,
 		`ALTER TABLE licenses ADD COLUMN raw_key TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE endpoint_profiles ADD COLUMN billing_mode TEXT NOT NULL DEFAULT 'per_request'`,
+		`ALTER TABLE endpoint_profiles ADD COLUMN per_request_cost_cents INTEGER NOT NULL DEFAULT 30`,
+		`ALTER TABLE endpoint_profiles ADD COLUMN input_cost_per_m INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE endpoint_profiles ADD COLUMN output_cost_per_m INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE usage_events ADD COLUMN input_tokens INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE usage_events ADD COLUMN output_tokens INTEGER NOT NULL DEFAULT 0`,
 	}
 	for _, stmt := range stmts {
 		if _, err := db.Exec(stmt); err != nil {
@@ -295,13 +307,13 @@ func (s *Store) Reserve(licenseID, hwid string, cost Money, provider, model, poo
 }
 
 // Commit records the reservation as a served request.
-func (s *Store) Commit(r *Reservation, provider, model, poolKeyID string, status int, streamed bool) error {
+func (s *Store) Commit(r *Reservation, provider, model, poolKeyID string, status int, streamed bool, inputTokens, outputTokens int64) error {
 	_, err := s.db.Exec(
 		`INSERT INTO usage_events
-		   (id, license_id, pool_key_id, provider, model, cost_cents, streamed, status_code, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		   (id, license_id, pool_key_id, provider, model, cost_cents, input_tokens, output_tokens, streamed, status_code, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		r.EventID, r.LicenseID, poolKeyID, provider, model,
-		int64(r.Cost), boolToInt(streamed), status, iso(time.Now().UTC()))
+		int64(r.Cost), inputTokens, outputTokens, boolToInt(streamed), status, iso(time.Now().UTC()))
 	return err
 }
 
@@ -547,6 +559,20 @@ func (s *Store) TopUpPoolKey(id string, amount Money) error {
 	return s.affectOne(`UPDATE pool_keys SET balance_cents = balance_cents + ?, exhausted_at = NULL WHERE id = ?`, int64(amount), id)
 }
 
+// DecryptPoolKeySecret returns the plaintext API secret for the given pool key.
+// Only used for server-side upstream balance queries; the secret is never returned to the browser.
+func (s *Store) DecryptPoolKeySecret(id string) (string, error) {
+	row := s.db.QueryRow(`SELECT secret_enc FROM pool_keys WHERE id = ?`, id)
+	var enc []byte
+	if err := row.Scan(&enc); err != nil {
+		if err == sql.ErrNoRows {
+			return "", ErrNotFound
+		}
+		return "", err
+	}
+	return s.decrypt(enc)
+}
+
 func (s *Store) RotatePoolKey(id, label, secret string, balance Money) (*PoolKey, error) {
 	oldKey, err := s.GetPoolKey(id)
 	if err != nil {
@@ -596,7 +622,7 @@ func (s *Store) RemovePoolKey(id string) error {
 	return s.affectOne(`DELETE FROM pool_keys WHERE id = ?`, id)
 }
 
-func (s *Store) SaveEndpointProfile(name, claudeBaseURL, poolGroup string, active bool) (*EndpointProfile, error) {
+func (s *Store) SaveEndpointProfile(name, claudeBaseURL, poolGroup string, active bool, billingMode string, perRequestCostCents, inputCostPerM, outputCostPerM int64) (*EndpointProfile, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, errors.New("endpoint profile name is required")
@@ -604,6 +630,12 @@ func (s *Store) SaveEndpointProfile(name, claudeBaseURL, poolGroup string, activ
 	claudeBaseURL = strings.TrimRight(strings.TrimSpace(claudeBaseURL), "/")
 	if claudeBaseURL == "" {
 		return nil, errors.New("claude base url is required")
+	}
+	if billingMode != BillingModeTokenBased {
+		billingMode = BillingModePerRequest
+	}
+	if perRequestCostCents <= 0 {
+		perRequestCostCents = DefaultPerRequestCents
 	}
 	poolGroup = normalizePoolGroup(poolGroup)
 	createdAt := iso(time.Now().UTC())
@@ -618,13 +650,17 @@ func (s *Store) SaveEndpointProfile(name, claudeBaseURL, poolGroup string, activ
 		}
 	}
 	if _, err := tx.Exec(
-		`INSERT INTO endpoint_profiles (name, claude_base_url, pool_group, active, created_at)
-		 VALUES (?, ?, ?, ?, ?)
+		`INSERT INTO endpoint_profiles (name, claude_base_url, pool_group, active, created_at, billing_mode, per_request_cost_cents, input_cost_per_m, output_cost_per_m)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(name) DO UPDATE SET
 		 claude_base_url = excluded.claude_base_url,
 		 pool_group = excluded.pool_group,
-		 active = excluded.active`,
-		name, claudeBaseURL, poolGroup, boolToInt(active), createdAt,
+		 active = excluded.active,
+		 billing_mode = excluded.billing_mode,
+		 per_request_cost_cents = excluded.per_request_cost_cents,
+		 input_cost_per_m = excluded.input_cost_per_m,
+		 output_cost_per_m = excluded.output_cost_per_m`,
+		name, claudeBaseURL, poolGroup, boolToInt(active), createdAt, billingMode, perRequestCostCents, inputCostPerM, outputCostPerM,
 	); err != nil {
 		return nil, err
 	}
@@ -635,13 +671,13 @@ func (s *Store) SaveEndpointProfile(name, claudeBaseURL, poolGroup string, activ
 }
 
 func (s *Store) GetEndpointProfile(name string) (*EndpointProfile, error) {
-	row := s.db.QueryRow(`SELECT name, claude_base_url, pool_group, active, created_at FROM endpoint_profiles WHERE name = ?`, strings.TrimSpace(name))
+	row := s.db.QueryRow(`SELECT name, claude_base_url, pool_group, active, created_at, billing_mode, per_request_cost_cents, input_cost_per_m, output_cost_per_m FROM endpoint_profiles WHERE name = ?`, strings.TrimSpace(name))
 	var (
 		ep      EndpointProfile
 		active  int
 		created string
 	)
-	if err := row.Scan(&ep.Name, &ep.ClaudeBaseURL, &ep.PoolGroup, &active, &created); err != nil {
+	if err := row.Scan(&ep.Name, &ep.ClaudeBaseURL, &ep.PoolGroup, &active, &created, &ep.BillingMode, &ep.PerRequestCostCents, &ep.InputCostPerM, &ep.OutputCostPerM); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrNotFound
 		}
@@ -653,7 +689,7 @@ func (s *Store) GetEndpointProfile(name string) (*EndpointProfile, error) {
 }
 
 func (s *Store) ListEndpointProfiles() []*EndpointProfile {
-	rows, err := s.db.Query(`SELECT name, claude_base_url, pool_group, active, created_at FROM endpoint_profiles ORDER BY created_at DESC`)
+	rows, err := s.db.Query(`SELECT name, claude_base_url, pool_group, active, created_at, billing_mode, per_request_cost_cents, input_cost_per_m, output_cost_per_m FROM endpoint_profiles ORDER BY created_at DESC`)
 	if err != nil {
 		return nil
 	}
@@ -665,7 +701,7 @@ func (s *Store) ListEndpointProfiles() []*EndpointProfile {
 			active  int
 			created string
 		)
-		if err := rows.Scan(&ep.Name, &ep.ClaudeBaseURL, &ep.PoolGroup, &active, &created); err != nil {
+		if err := rows.Scan(&ep.Name, &ep.ClaudeBaseURL, &ep.PoolGroup, &active, &created, &ep.BillingMode, &ep.PerRequestCostCents, &ep.InputCostPerM, &ep.OutputCostPerM); err != nil {
 			continue
 		}
 		ep.Active = active == 1
@@ -731,13 +767,13 @@ func (s *Store) DeleteEndpointProfile(name string) error {
 }
 
 func (s *Store) ActiveEndpointProfile() (*EndpointProfile, error) {
-	row := s.db.QueryRow(`SELECT name, claude_base_url, pool_group, active, created_at FROM endpoint_profiles WHERE active = 1 ORDER BY created_at DESC LIMIT 1`)
+	row := s.db.QueryRow(`SELECT name, claude_base_url, pool_group, active, created_at, billing_mode, per_request_cost_cents, input_cost_per_m, output_cost_per_m FROM endpoint_profiles WHERE active = 1 ORDER BY created_at DESC LIMIT 1`)
 	var (
 		ep      EndpointProfile
 		active  int
 		created string
 	)
-	if err := row.Scan(&ep.Name, &ep.ClaudeBaseURL, &ep.PoolGroup, &active, &created); err != nil {
+	if err := row.Scan(&ep.Name, &ep.ClaudeBaseURL, &ep.PoolGroup, &active, &created, &ep.BillingMode, &ep.PerRequestCostCents, &ep.InputCostPerM, &ep.OutputCostPerM); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrNotFound
 		}
@@ -757,7 +793,7 @@ func (s *Store) UsageFiltered(licenseID, search, status string, limit int) []*Us
 	if limit <= 0 {
 		limit = 500
 	}
-	query := `SELECT id, license_id, pool_key_id, provider, model, cost_cents, streamed, status_code, created_at
+	query := `SELECT id, license_id, pool_key_id, provider, model, cost_cents, input_tokens, output_tokens, streamed, status_code, created_at
 	            FROM usage_events`
 	args := []any{}
 	clauses := []string{}
@@ -803,7 +839,7 @@ func (s *Store) UsageFiltered(licenseID, search, status string, limit int) []*Us
 			created  string
 		)
 		if err := rows.Scan(&e.ID, &e.LicenseID, &e.PoolKeyID, &e.Provider, &e.Model,
-			&cost, &streamed, &e.StatusCode, &created); err != nil {
+			&cost, &e.InputTokens, &e.OutputTokens, &streamed, &e.StatusCode, &created); err != nil {
 			continue
 		}
 		e.CostCents = Money(cost)

@@ -103,9 +103,13 @@ export async function saveEndpointProfileAction(formData) {
   const claudeBaseURL = String(formData.get("claude_base_url") || "").trim();
   const poolGroup = String(formData.get("pool_group") || "").trim();
   const active = String(formData.get("active") || "") === "on";
+  const billingMode = String(formData.get("billing_mode") || "per_request");
+  const perRequestCostCents = centsFromDollarsInput(String(formData.get("per_request_cost_dollars") || "0.30")) || 30;
+  const inputCostPerM = centsFromDollarsInput(String(formData.get("input_cost_per_m_dollars") || "0")) || 0;
+  const outputCostPerM = centsFromDollarsInput(String(formData.get("output_cost_per_m_dollars") || "0")) || 0;
   if (!name || !claudeBaseURL) return;
 
-  await relay.saveEndpointProfile(name, claudeBaseURL, poolGroup, active);
+  await relay.saveEndpointProfile(name, claudeBaseURL, poolGroup, active, billingMode, perRequestCostCents, inputCostPerM, outputCostPerM);
   revalidatePath("/pool");
 }
 
@@ -117,4 +121,8 @@ export async function activateEndpointProfileAction(name) {
 export async function deleteEndpointProfileAction(name) {
   await relay.deleteEndpointProfile(name);
   revalidatePath("/pool");
+}
+
+export async function getUpstreamUsageAction(id) {
+  return await relay.getUpstreamUsage(id);
 }

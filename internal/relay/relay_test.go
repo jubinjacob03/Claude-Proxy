@@ -171,8 +171,8 @@ func TestPooledKeyIsInjectedAndNeverReturned(t *testing.T) {
 
 func TestQuotaIsEnforcedAndReportsClearly(t *testing.T) {
 	up := newUpstream(t)
-	// 40 cents buys exactly two 20 cent opus calls.
-	srv, _, lic := newRelay(t, up, 40)
+	// 60 cents buys exactly two 30 cent opus calls.
+	srv, _, lic := newRelay(t, up, 60)
 	token := activate(t, srv.URL, lic.Key, "machine-a")
 	auth := map[string]string{"Authorization": "Bearer " + token}
 
@@ -212,11 +212,11 @@ func TestSpendIsTrackedPerLicence(t *testing.T) {
 
 	gotA, _ := store.Get(first.ID)
 	gotB, _ := store.Get(second.ID)
-	if gotA.SpentCents != 60 {
-		t.Errorf("licence A spent %v, want 60", gotA.SpentCents)
+	if gotA.SpentCents != 90 {
+		t.Errorf("licence A spent %v, want 90", gotA.SpentCents)
 	}
-	if gotB.SpentCents != 20 {
-		t.Errorf("licence B spent %v, want 20 (usage must not pool across users)", gotB.SpentCents)
+	if gotB.SpentCents != 30 {
+		t.Errorf("licence B spent %v, want 30 (usage must not pool across users)", gotB.SpentCents)
 	}
 }
 

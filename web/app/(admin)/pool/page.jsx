@@ -1,4 +1,4 @@
-import { Wallet } from "lucide-react";
+import { Wallet, ServerOff, KeyRound } from "lucide-react";
 import { relay } from "@/lib/relay";
 import { formatCents, formatDateTime } from "@/lib/format";
 import {
@@ -7,6 +7,9 @@ import {
   deletePoolKeyAction,
   disablePoolKeyAction,
   enablePoolKeyAction,
+  rotatePoolKeyAction,
+  topUpPoolKeyAction,
+  getUpstreamUsageAction,
 } from "../actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,6 +25,8 @@ import EndpointProfileForm from "./EndpointProfileForm";
 import ConfirmButton from "./ConfirmButton";
 import RotatePoolKeyForm from "./RotatePoolKeyForm";
 import TopUpPoolKeyForm from "./TopUpPoolKeyForm";
+import MotionRow from "@/components/motion/MotionRow";
+import { UpstreamSpendButton } from "./UpstreamSpendButton";
 
 export default async function PoolPage() {
   const [{ pool }, { profiles }] = await Promise.all([
@@ -56,7 +61,7 @@ export default async function PoolPage() {
               <Wallet className="size-5" />
             </div>
             <div>
-              <CardTitle className="font-serif text-3xl font-normal text-white/90">Base URL profiles</CardTitle>
+              <CardTitle className="font-serif text-3xl font-normal bg-clip-text text-transparent bg-gradient-to-r from-primary to-amber-200">Base URL profiles</CardTitle>
               <CardDescription>
                 Create Base URL nodes, attach each to a pool group, and set one
                 active profile for live relay traffic.
@@ -73,18 +78,29 @@ export default async function PoolPage() {
                   <th className="px-3 py-3">Name</th>
                   <th className="px-3 py-3">Base URL</th>
                   <th className="px-3 py-3">Pool group</th>
+                  <th className="px-3 py-3">Billing</th>
                   <th className="px-3 py-3">Status</th>
                   <th className="px-3 py-3">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {profiles.map((profile) => (
-                  <tr key={profile.name} className="border-b border-white/5">
+                  <MotionRow key={profile.name} className="border-b border-white/5 transition-colors hover:bg-white/[0.02]">
                     <td className="px-3 py-3 font-medium">{profile.name}</td>
                     <td className="px-3 py-3 text-neutral-400">
                       {profile.claude_base_url}
                     </td>
                     <td className="px-3 py-3">{profile.pool_group}</td>
+                    <td className="px-3 py-3">
+                      {profile.billing_mode === "token_based" ? (
+                        <div className="flex flex-col text-xs text-neutral-400">
+                          <span>{formatCents(profile.input_cost_per_m)}/1M in</span>
+                          <span>{formatCents(profile.output_cost_per_m)}/1M out</span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-neutral-400">{formatCents(profile.per_request_cost_cents)}/req</span>
+                      )}
+                    </td>
                     <td className="px-3 py-3">
                       <Badge variant={profile.active ? "success" : "outline"}>
                         {profile.active ? "Active" : "Inactive"}
@@ -119,15 +135,18 @@ export default async function PoolPage() {
                         </form>
                       </div>
                     </td>
-                  </tr>
+                  </MotionRow>
                 ))}
                 {profiles.length === 0 ? (
                   <tr>
                     <td
                       colSpan={5}
-                      className="px-3 py-8 text-center text-neutral-500"
+                      className="px-3 py-10 text-center text-neutral-500"
                     >
-                      No Base URL profiles yet.
+                      <div className="flex flex-col items-center gap-2">
+                        <ServerOff className="size-6 opacity-40" />
+                        <p>No Base URL profiles yet.</p>
+                      </div>
                     </td>
                   </tr>
                 ) : null}
@@ -139,7 +158,7 @@ export default async function PoolPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="font-serif text-2xl font-normal text-white/90">Add a pooled key</CardTitle>
+          <CardTitle className="font-serif text-2xl font-normal bg-clip-text text-transparent bg-gradient-to-r from-primary to-amber-200">Add a pooled key</CardTitle>
           <CardDescription>
             Add keys under the profile pool group tree.
           </CardDescription>
@@ -151,7 +170,7 @@ export default async function PoolPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="font-serif text-2xl font-normal text-white/90">Key hierarchy</CardTitle>
+          <CardTitle className="font-serif text-2xl font-normal bg-clip-text text-transparent bg-gradient-to-r from-primary to-amber-200">Key hierarchy</CardTitle>
           <CardDescription>
             {pool.length} keys across {poolGroups.length} pool groups. Active
             group: {activePoolGroup}
@@ -190,6 +209,7 @@ export default async function PoolPage() {
                           <th className="px-3 py-3">Provider</th>
                           <th className="px-3 py-3">Status</th>
                           <th className="px-3 py-3">Balance</th>
+                          <th className="px-3 py-3">Upstream Spend</th>
                           <th className="px-3 py-3">Added</th>
                           <th className="px-3 py-3">Top up</th>
                           <th className="px-3 py-3">Rotate</th>
@@ -198,9 +218,9 @@ export default async function PoolPage() {
                       </thead>
                       <tbody>
                         {keys.map((k) => (
-                          <tr
+                          <MotionRow
                             key={k.id}
-                            className="border-b border-white/5 align-top"
+                            className="border-b border-white/5 align-top transition-colors hover:bg-white/[0.02]"
                           >
                             <td className="px-3 py-3">{k.label || "-"}</td>
                             <td className="px-3 py-3 uppercase text-neutral-400">
@@ -226,6 +246,9 @@ export default async function PoolPage() {
                             <td className="px-3 py-3">
                               {formatCents(k.remaining_cents)} left of{" "}
                               {formatCents(k.balance_cents)}
+                            </td>
+                            <td className="px-3 py-3">
+                              <UpstreamSpendButton id={k.id} getUsage={getUpstreamUsageAction} />
                             </td>
                             <td className="px-3 py-3 text-neutral-500">
                               {formatDateTime(k.created_at)}
@@ -270,15 +293,18 @@ export default async function PoolPage() {
                                 </form>
                               </div>
                             </td>
-                          </tr>
+                          </MotionRow>
                         ))}
                         {keys.length === 0 ? (
                           <tr>
                             <td
                               colSpan={8}
-                              className="px-3 py-8 text-center text-neutral-500"
+                              className="px-3 py-10 text-center text-neutral-500"
                             >
-                              No keys in this pool group.
+                              <div className="flex flex-col items-center gap-2">
+                                <KeyRound className="size-6 opacity-40" />
+                                <p>No keys in this pool group.</p>
+                              </div>
                             </td>
                           </tr>
                         ) : null}

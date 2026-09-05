@@ -126,7 +126,7 @@ func TestRelayAdminLicenseAndUsageFilters(t *testing.T) {
 	}
 
 	res := &license.Reservation{EventID: license.NewID(), LicenseID: id, PoolKeyID: "pool-1", Cost: 25}
-	if err := store.Commit(res, "claude", "claude-opus-5", "pool-1", 200, true); err != nil {
+	if err := store.Commit(res, "claude", "claude-opus-5", "pool-1", 200, true, 0, 0); err != nil {
 		t.Fatal(err)
 	}
 	usage := adminGet(t, server, "/admin/usage?license_id="+id+"&q=opus&status=success")

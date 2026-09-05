@@ -87,12 +87,22 @@ type PoolKey struct {
 }
 
 type EndpointProfile struct {
-	Name          string
-	ClaudeBaseURL string
-	PoolGroup     string
-	Active        bool
-	CreatedAt     time.Time
+	Name                string
+	ClaudeBaseURL       string
+	PoolGroup           string
+	Active              bool
+	CreatedAt           time.Time
+	BillingMode         string
+	PerRequestCostCents Money
+	InputCostPerM       int64
+	OutputCostPerM      int64
 }
+
+const (
+	BillingModePerRequest  = "per_request"
+	BillingModeTokenBased  = "token_based"
+	DefaultPerRequestCents = 30
+)
 
 // Remaining reports the credit left on a pooled key.
 func (k *PoolKey) Remaining() Money {
@@ -110,15 +120,17 @@ const (
 // UsageEvent is one metered request. Rows are append-only so that a user's
 // spend can always be reconciled against what was actually served.
 type UsageEvent struct {
-	ID         string
-	LicenseID  string
-	PoolKeyID  string
-	Provider   string
-	Model      string
-	CostCents  Money
-	Streamed   bool
-	StatusCode int
-	CreatedAt  time.Time
+	ID           string
+	LicenseID    string
+	PoolKeyID    string
+	Provider     string
+	Model        string
+	CostCents    Money
+	InputTokens  int64
+	OutputTokens int64
+	Streamed      bool
+	StatusCode   int
+	CreatedAt    time.Time
 }
 
 // NewID returns a random identifier suitable for a primary key.

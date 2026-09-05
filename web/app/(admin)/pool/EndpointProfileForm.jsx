@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { saveEndpointProfileAction } from "../actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,8 @@ export default function EndpointProfileForm() {
     },
     initialState,
   );
+
+  const [billingMode, setBillingMode] = useState("per_request");
 
   return (
     <form action={formAction} className="grid gap-4 sm:grid-cols-5">
@@ -51,6 +53,59 @@ export default function EndpointProfileForm() {
           Active
         </label>
       </div>
+
+      <div className="sm:col-span-5 grid gap-4 sm:grid-cols-4 p-4 bg-neutral-900 rounded-lg border border-neutral-800">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="billing_mode">Billing mode</Label>
+          <select
+            id="billing_mode"
+            name="billing_mode"
+            value={billingMode}
+            onChange={(e) => setBillingMode(e.target.value)}
+            className="flex h-9 w-full rounded-md border border-neutral-800 bg-neutral-950 px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <option value="per_request">Per Request</option>
+            <option value="token_based">Token Based</option>
+          </select>
+        </div>
+
+        {billingMode === "per_request" ? (
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="per_request_cost_dollars">Cost per request ($)</Label>
+            <Input
+              id="per_request_cost_dollars"
+              name="per_request_cost_dollars"
+              placeholder="0.30"
+              defaultValue="0.30"
+              required
+            />
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="input_cost_per_m_dollars">Input cost / 1M ($)</Label>
+              <Input
+                id="input_cost_per_m_dollars"
+                name="input_cost_per_m_dollars"
+                placeholder="15.00"
+                defaultValue="15.00"
+                required
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="output_cost_per_m_dollars">Output cost / 1M ($)</Label>
+              <Input
+                id="output_cost_per_m_dollars"
+                name="output_cost_per_m_dollars"
+                placeholder="75.00"
+                defaultValue="75.00"
+                required
+              />
+            </div>
+          </>
+        )}
+      </div>
+
       <div className="sm:col-span-5">
         <Button type="submit" disabled={pending}>
           {pending ? "Saving..." : "Save Base URL"}

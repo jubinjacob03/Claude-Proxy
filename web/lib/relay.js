@@ -93,9 +93,10 @@ export const relay = {
   enablePoolKey: (id) => call(`/admin/pool/${id}/enable`, { method: "POST" }),
   disablePoolKey: (id) => call(`/admin/pool/${id}/disable`, { method: "POST" }),
   deletePoolKey: (id) => call(`/admin/pool/${id}/delete`, { method: "POST" }),
+  getUpstreamUsage: (id) => call(`/admin/pool/${id}/upstream-usage`),
 
   listEndpointProfiles: () => call("/admin/endpoints"),
-  saveEndpointProfile: (name, claudeBaseURL, poolGroup, active = false) =>
+  saveEndpointProfile: (name, claudeBaseURL, poolGroup, active = false, billingMode, perRequestCostCents, inputCostPerM, outputCostPerM) =>
     call("/admin/endpoints", {
       method: "POST",
       body: JSON.stringify({
@@ -103,6 +104,10 @@ export const relay = {
         claude_base_url: claudeBaseURL,
         pool_group: poolGroup,
         active,
+        billing_mode: billingMode,
+        per_request_cost_cents: perRequestCostCents,
+        input_cost_per_m: inputCostPerM,
+        output_cost_per_m: outputCostPerM,
       }),
     }),
   getEndpointProfile: (name) =>
