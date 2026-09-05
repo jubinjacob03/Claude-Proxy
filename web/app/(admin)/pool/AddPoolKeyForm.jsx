@@ -6,13 +6,14 @@ import { addPoolKeyAction } from "../actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useActionToast } from "@/components/toast/ToastProvider";
 
 const initialState = { error: null };
 
 async function submit(_prevState, formData) {
   try {
     await addPoolKeyAction(formData);
-    return { error: null };
+    return { error: null, success: true };
   } catch (err) {
     return { error: err.message || "Failed to add the key." };
   }
@@ -20,6 +21,7 @@ async function submit(_prevState, formData) {
 
 export default function AddPoolKeyForm({ poolGroups = [] }) {
   const [state, formAction, pending] = useActionState(submit, initialState);
+  useActionToast(state, "Key added to pool");
 
   return (
     <form action={formAction} className="grid gap-4 sm:grid-cols-4">

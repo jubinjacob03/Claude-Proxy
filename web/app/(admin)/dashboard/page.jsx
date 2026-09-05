@@ -8,10 +8,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import MotionCard from "@/components/motion/MotionCard";
 
-function Stat({ icon: Icon, label, value, hint }) {
+function Stat({ icon: Icon, label, value, hint, delay = 0 }) {
   return (
-    <Card>
+    <MotionCard delay={delay}>
+      <Card className="h-full">
       <CardContent className="flex items-start gap-4 pt-6">
         <div className="glow-ring rounded-xl bg-primary/10 p-2.5 text-primary">
           <Icon className="size-5" />
@@ -24,7 +26,8 @@ function Stat({ icon: Icon, label, value, hint }) {
           ) : null}
         </div>
       </CardContent>
-    </Card>
+      </Card>
+    </MotionCard>
   );
 }
 
@@ -43,41 +46,49 @@ export default async function DashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat
+          <Stat
           icon={KeyRound}
           label="Licences"
           value={licenses.length}
           hint={`${active} active`}
+          delay={0.1}
         />
         <Stat
           icon={ShieldCheck}
           label="Activated machines"
           value={bound}
           hint="bound to a device"
+          delay={0.2}
         />
         <Stat
           icon={Activity}
           label="Spend so far"
           value={formatCents(totalSpent)}
           hint={`of ${formatCents(totalQuota)} issued`}
+          delay={0.3}
         />
         <Stat
           icon={Wallet}
           label="Pool credit left"
           value={formatCents(poolRemaining)}
           hint={`${pool.filter((k) => k.active).length} active keys`}
+          delay={0.4}
         />
       </div>
-      <Card>
-        <CardHeader>
-          <CardTitle className="font-serif text-3xl font-normal text-white/90">Getting started</CardTitle>
+      <MotionCard delay={0.5}>
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-serif text-3xl font-normal bg-clip-text text-transparent bg-gradient-to-r from-primary to-amber-200">
+              Getting started
+            </CardTitle>
           <CardDescription>
             Add a pooled upstream key under Key pool, then generate licences under
             Licences. Each licence binds to one machine on first use and stops
             working once its balance is spent.
           </CardDescription>
         </CardHeader>
-      </Card>
+        </Card>
+      </MotionCard>
     </div>
   );
 }

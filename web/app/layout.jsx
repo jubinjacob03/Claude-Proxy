@@ -1,7 +1,5 @@
 import { Outfit, Newsreader } from "next/font/google";
 import "./globals.css";
-import ToastProvider from "@/components/toast/ToastProvider";
-
 const outfit = Outfit({
   subsets: ["latin"],
   variable: "--font-outfit",
@@ -20,11 +18,15 @@ export const metadata = {
   description: "Issue licences, manage the API key pool, and watch usage.",
 };
 
+import { ToastProvider } from "@/components/toast/ToastProvider";
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en" className={`${outfit.variable} ${newsreader.variable}`}>
       <body className="min-h-screen font-sans antialiased text-white/90">
-        <ToastProvider>{children}</ToastProvider>
+        <ToastProvider>
+          {children}
+        </ToastProvider>
       </body>
     </html>
   );

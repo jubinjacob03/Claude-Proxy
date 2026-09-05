@@ -13,14 +13,22 @@ import (
 
 const anthropicVersionDefault = "2023-06-01"
 
+// ForwardResult holds the upstream response status and token usage extracted
+// from the response body for accurate billing.
+type ForwardResult struct {
+	StatusCode   int
+	InputTokens  int64
+	OutputTokens int64
+}
+
 // forward relays the client's body to the upstream using a pooled credential
-// and streams the answer straight back. It returns the upstream status so the
-// caller can decide whether the request was billable; 0 means it never ran.
-func (s *Server) forward(w http.ResponseWriter, r *http.Request, baseURL string, poolKey *license.PoolKey, body []byte, streamed bool) int {
+// and streams the answer straight back. It returns a ForwardResult so the
+// caller can decide whether the request was billable and apply token-based pricing.
+func (s *Server) forward(w http.ResponseWriter, r *http.Request, baseURL string, poolKey *license.PoolKey, body []byte, streamed bool) ForwardResult {
 	req, err := http.NewRequestWithContext(r.Context(), r.Method, baseURL+r.URL.Path, bytes.NewReader(body))
 	if err != nil {
 		writeUpstreamError(w, r, http.StatusBadGateway, "upstream request could not be built")
-		return 0
+		return ForwardResult{}
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -50,14 +58,7 @@ func (s *Server) forward(w http.ResponseWriter, r *http.Request, baseURL string,
 	if err != nil {
 		logx.Error("upstream %s failed: %v", r.URL.Path, err)
 		writeUpstreamError(w, r, http.StatusBadGateway, "upstream request failed")
-		return 0
-	}
-	if shouldRetirePoolKey(resp.StatusCode) {
-		if err := s.store.SetPoolKeyActive(poolKey.ID, false); err != nil {
-			logx.Error("retire pool key %s failed: %v", poolKey.ID, err)
-		} else {
-			logx.Warn("retired pool key %s after upstream status %d", poolKey.ID, resp.StatusCode)
-		}
+		return ForwardResult{}
 	}
 	defer resp.Body.Close()
 
@@ -73,32 +74,95 @@ func (s *Server) forward(w http.ResponseWriter, r *http.Request, baseURL string,
 	}
 	w.WriteHeader(resp.StatusCode)
 
+	result := ForwardResult{StatusCode: resp.StatusCode}
+
 	if streamed {
-		flushCopy(w, resp.Body)
+		result.InputTokens, result.OutputTokens = flushCopySSE(w, resp.Body)
 	} else {
-		_, _ = io.Copy(w, resp.Body)
+		respBody, _ := io.ReadAll(resp.Body)
+		_, _ = w.Write(respBody)
+		result.InputTokens, result.OutputTokens = extractTokensFromJSON(respBody)
 	}
-	return resp.StatusCode
+	return result
 }
 
-func flushCopy(w http.ResponseWriter, src io.Reader) {
+// flushCopySSE streams SSE events to the client and extracts token usage
+// from the final usage event embedded in the stream.
+func flushCopySSE(w http.ResponseWriter, src io.Reader) (inputTokens, outputTokens int64) {
 	flush := func() {}
 	if f, ok := w.(http.Flusher); ok {
 		flush = f.Flush
 	}
-	buf := make([]byte, 32*1024)
+
+	var buf bytes.Buffer
+	raw := make([]byte, 32*1024)
 	for {
-		n, err := src.Read(buf)
+		n, err := src.Read(raw)
 		if n > 0 {
-			if _, werr := w.Write(buf[:n]); werr != nil {
+			chunk := raw[:n]
+			buf.Write(chunk)
+			if _, werr := w.Write(chunk); werr != nil {
 				return
 			}
 			flush()
 		}
 		if err != nil {
-			return
+			break
 		}
 	}
+
+	// Parse the accumulated SSE stream to find token usage in data events.
+	inputTokens, outputTokens = extractTokensFromSSE(buf.Bytes())
+	return
+}
+
+// extractTokensFromJSON parses a non-streamed JSON response and extracts
+// the usage.prompt_tokens and usage.completion_tokens fields.
+func extractTokensFromJSON(body []byte) (inputTokens, outputTokens int64) {
+	var resp struct {
+		Usage struct {
+			PromptTokens     int64 `json:"prompt_tokens"`
+			CompletionTokens int64 `json:"completion_tokens"`
+			InputTokens      int64 `json:"input_tokens"`
+			OutputTokens     int64 `json:"output_tokens"`
+		} `json:"usage"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return 0, 0
+	}
+	// New API returns prompt_tokens / completion_tokens (OpenAI style).
+	// Anthropic native returns input_tokens / output_tokens. Handle both.
+	in := resp.Usage.PromptTokens
+	if in == 0 {
+		in = resp.Usage.InputTokens
+	}
+	out := resp.Usage.CompletionTokens
+	if out == 0 {
+		out = resp.Usage.OutputTokens
+	}
+	return in, out
+}
+
+// extractTokensFromSSE scans SSE data lines for usage information.
+// New API embeds a final "usage" object in the last data event before [DONE].
+func extractTokensFromSSE(stream []byte) (inputTokens, outputTokens int64) {
+	lines := bytes.Split(stream, []byte("\n"))
+	for _, line := range lines {
+		line = bytes.TrimSpace(line)
+		if !bytes.HasPrefix(line, []byte("data:")) {
+			continue
+		}
+		data := bytes.TrimSpace(bytes.TrimPrefix(line, []byte("data:")))
+		if len(data) == 0 || string(data) == "[DONE]" {
+			continue
+		}
+		in, out := extractTokensFromJSON(data)
+		if in > 0 || out > 0 {
+			inputTokens = in
+			outputTokens = out
+		}
+	}
+	return
 }
 
 func isAnthropicPath(path string) bool {
@@ -169,8 +233,4 @@ func openAIErrorType(status int) string {
 	default:
 		return "api_error"
 	}
-}
-
-func shouldRetirePoolKey(status int) bool {
-	return status == http.StatusUnauthorized || status == http.StatusForbidden || status == http.StatusPaymentRequired
 }

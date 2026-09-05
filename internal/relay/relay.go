@@ -156,14 +156,14 @@ func (s *Server) handleFree(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body, _ := io.ReadAll(io.LimitReader(r.Body, 8<<20))
-	target, poolGroup := s.resolveEndpoint()
+	profile, poolGroup := s.resolveEndpoint()
 	key, err := s.store.TakePoolKeyForGroup(license.ProviderClaude, poolGroup)
 	if err != nil {
 		logx.Error("licence %s: %v", l.ID, err)
 		writeUpstreamError(w, r, http.StatusServiceUnavailable, "No upstream capacity is available.")
 		return
 	}
-	s.forward(w, r, target, key, body, false)
+	s.forward(w, r, profile.ClaudeBaseURL, key, body, false)
 }
 
 // handleProxy is the metered path: authenticate, price, debit, forward.
@@ -186,8 +186,27 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 
 	model, streamed := inspectRequest(body)
 	provider := license.ProviderClaude
-	cost := s.pricing.Cost(model)
-	target, poolGroup := s.resolveEndpoint()
+	profile, poolGroup := s.resolveEndpoint()
+
+	// Determine billing mode and pre-charge cost.
+	// For token-based endpoints we pre-charge a conservative estimate and
+	// then reconcile after we see the actual token counts.
+	var preChargeCost license.Money
+	billingMode := profile.BillingMode
+	if billingMode == "" {
+		billingMode = license.BillingModePerRequest
+	}
+	switch billingMode {
+	case license.BillingModeTokenBased:
+		// Pre-charge a safe maximum (500 cents = $5) to guarantee the licence
+		// has capacity; we will Release the difference after the real cost is known.
+		preChargeCost = 500
+	default:
+		preChargeCost = profile.PerRequestCostCents
+		if preChargeCost <= 0 {
+			preChargeCost = s.pricing.Cost(model)
+		}
+	}
 
 	poolKey, err := s.store.TakePoolKeyForGroup(provider, poolGroup)
 	if err != nil {
@@ -198,25 +217,42 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 
 	// Debit before forwarding. Charging first is what stops two parallel
 	// requests from spending the same last cent.
-	reservation, err := s.store.Reserve(l.ID, l.HWID, cost, provider, model, poolKey.ID)
+	reservation, err := s.store.Reserve(l.ID, l.HWID, preChargeCost, provider, model, poolKey.ID)
 	if err != nil {
 		s.writeAuthError(w, r, err)
 		return
 	}
 
-	status := s.forward(w, r, target, poolKey, body, streamed)
+	result := s.forward(w, r, profile.ClaudeBaseURL, poolKey, body, streamed)
 
-	// Bill only what the upstream actually served. Anything else - a dead
-	// pooled key (401/403), our own exhausted upstream account (402), a
-	// timeout, a rate limit, or a transport failure - is our problem, not the
-	// customer's, so the reservation goes back.
-	if !servedSuccessfully(status) {
+	// Bill only what the upstream actually served.
+	if !servedSuccessfully(result.StatusCode) {
 		if rerr := s.store.Release(reservation); rerr != nil {
 			logx.Error("refund failed for licence %s: %v", l.ID, rerr)
 		}
 		return
 	}
-	if err := s.store.Commit(reservation, provider, model, poolKey.ID, status, streamed); err != nil {
+
+	// For token-based billing, calculate the real cost and refund the difference.
+	actualCost := preChargeCost
+	if billingMode == license.BillingModeTokenBased && (result.InputTokens > 0 || result.OutputTokens > 0) {
+		actualCost = license.TokenCost(result.InputTokens, result.OutputTokens, profile.InputCostPerM, profile.OutputCostPerM)
+		if actualCost < preChargeCost {
+			refund := preChargeCost - actualCost
+			refundReservation := &license.Reservation{
+				EventID:   "",
+				LicenseID: reservation.LicenseID,
+				PoolKeyID: reservation.PoolKeyID,
+				Cost:      refund,
+			}
+			if rerr := s.store.Release(refundReservation); rerr != nil {
+				logx.Error("token-based refund failed for licence %s: %v", l.ID, rerr)
+			}
+			reservation.Cost = actualCost
+		}
+	}
+
+	if err := s.store.Commit(reservation, provider, model, poolKey.ID, result.StatusCode, streamed, result.InputTokens, result.OutputTokens); err != nil {
 		logx.Error("usage commit failed for licence %s: %v", l.ID, err)
 	}
 }
@@ -243,7 +279,7 @@ func (s *Server) upstreamFor(provider string) string {
 	return strings.TrimRight(s.cfg.ClaudeBaseURL, "/")
 }
 
-func (s *Server) resolveEndpoint() (string, string) {
+func (s *Server) resolveEndpoint() (*license.EndpointProfile, string) {
 	if profile, err := s.store.ActiveEndpointProfile(); err == nil {
 		base := strings.TrimRight(strings.TrimSpace(profile.ClaudeBaseURL), "/")
 		poolGroup := strings.TrimSpace(profile.PoolGroup)
@@ -251,10 +287,18 @@ func (s *Server) resolveEndpoint() (string, string) {
 			if poolGroup == "" {
 				poolGroup = "default"
 			}
-			return base, poolGroup
+			profile.ClaudeBaseURL = base
+			profile.PoolGroup = poolGroup
+			return profile, poolGroup
 		}
 	}
-	return s.upstreamFor(license.ProviderClaude), "default"
+	// Fallback: synthesize a profile with defaults from config.
+	return &license.EndpointProfile{
+		ClaudeBaseURL:       strings.TrimRight(s.cfg.ClaudeBaseURL, "/"),
+		PoolGroup:           "default",
+		BillingMode:         license.BillingModePerRequest,
+		PerRequestCostCents: license.DefaultPerRequestCents,
+	}, "default"
 }
 
 // inspectRequest pulls the billing-relevant fields out of a request body

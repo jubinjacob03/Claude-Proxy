@@ -173,14 +173,14 @@ func (s *Server) handleAdminPoolItem(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"id": k.ID, "label": k.Label, "provider": k.Provider,
-			"pool_group": k.PoolGroup,
-			"balance_cents": int64(k.BalanceCents),
-			"spent_cents": int64(k.SpentCents),
+			"pool_group":      k.PoolGroup,
+			"balance_cents":   int64(k.BalanceCents),
+			"spent_cents":     int64(k.SpentCents),
 			"remaining_cents": int64(k.Remaining()),
-			"active": k.Active,
-			"created_at": k.CreatedAt,
-			"last_used": k.LastUsed,
-			"exhausted_at": k.ExhaustedAt,
+			"active":          k.Active,
+			"created_at":      k.CreatedAt,
+			"last_used":       k.LastUsed,
+			"exhausted_at":    k.ExhaustedAt,
 		})
 	case "disable":
 		s.mutate(w, s.store.SetPoolKeyActive(id, false))
@@ -214,6 +214,40 @@ func (s *Server) handleAdminPoolItem(w http.ResponseWriter, r *http.Request) {
 			"id": k.ID, "label": k.Label, "provider": k.Provider,
 			"pool_group": k.PoolGroup, "balance_cents": int64(k.BalanceCents),
 		})
+	case "upstream-usage":
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		k, err := s.store.GetPoolKey(id)
+		if err != nil {
+			writeError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		secret, decErr := s.store.DecryptPoolKeySecret(k.ID)
+		if decErr != nil {
+			writeError(w, http.StatusInternalServerError, "could not read key secret")
+			return
+		}
+		profile, _ := s.store.ActiveEndpointProfile()
+		baseURL := s.cfg.ClaudeBaseURL
+		if profile != nil && profile.ClaudeBaseURL != "" {
+			baseURL = profile.ClaudeBaseURL
+		}
+		baseURL = strings.TrimRight(baseURL, "/")
+		req, _ := http.NewRequestWithContext(r.Context(), http.MethodGet, baseURL+"/v1/dashboard/billing/usage", nil)
+		req.Header.Set("Authorization", "Bearer "+secret)
+		req.Header.Set("User-Agent", "claude-relay")
+		resp, httpErr := s.client.Do(req)
+		if httpErr != nil {
+			writeError(w, http.StatusBadGateway, "upstream request failed")
+			return
+		}
+		defer resp.Body.Close()
+		upstreamBody, _ := io.ReadAll(resp.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(resp.StatusCode)
+		_, _ = w.Write(upstreamBody)
 	case "delete":
 		s.mutate(w, s.store.RemovePoolKey(id))
 	default:
@@ -230,16 +264,20 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"profiles": viewEndpointProfiles(s.store.ListEndpointProfiles())})
 	case http.MethodPost:
 		var body struct {
-			Name          string `json:"name"`
-			ClaudeBaseURL string `json:"claude_base_url"`
-			PoolGroup     string `json:"pool_group"`
-			Active        bool   `json:"active"`
+			Name                string `json:"name"`
+			ClaudeBaseURL       string `json:"claude_base_url"`
+			PoolGroup           string `json:"pool_group"`
+			Active              bool   `json:"active"`
+			BillingMode         string `json:"billing_mode"`
+			PerRequestCostCents int64  `json:"per_request_cost_cents"`
+			InputCostPerM       int64  `json:"input_cost_per_m"`
+			OutputCostPerM      int64  `json:"output_cost_per_m"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&body); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid JSON")
 			return
 		}
-		profile, err := s.store.SaveEndpointProfile(body.Name, body.ClaudeBaseURL, body.PoolGroup, body.Active)
+		profile, err := s.store.SaveEndpointProfile(body.Name, body.ClaudeBaseURL, body.PoolGroup, body.Active, body.BillingMode, body.PerRequestCostCents, body.InputCostPerM, body.OutputCostPerM)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
@@ -298,15 +336,17 @@ func (s *Server) handleAdminUsage(w http.ResponseWriter, r *http.Request) {
 	events := []map[string]any{}
 	for _, e := range s.store.UsageFiltered(wantLicense, query, status, 500) {
 		events = append(events, map[string]any{
-			"id":          e.ID,
-			"license_id":  e.LicenseID,
-			"pool_key_id": e.PoolKeyID,
-			"provider":    e.Provider,
-			"model":       e.Model,
-			"cost_cents":  int64(e.CostCents),
-			"streamed":    e.Streamed,
-			"status_code": e.StatusCode,
-			"created_at":  e.CreatedAt,
+			"id":           e.ID,
+			"license_id":   e.LicenseID,
+			"pool_key_id":  e.PoolKeyID,
+			"provider":     e.Provider,
+			"model":        e.Model,
+			"cost_cents":   int64(e.CostCents),
+			"input_tokens":  e.InputTokens,
+			"output_tokens": e.OutputTokens,
+			"streamed":     e.Streamed,
+			"status_code":  e.StatusCode,
+			"created_at":   e.CreatedAt,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"events": events})
@@ -377,10 +417,14 @@ func viewEndpointProfiles(list []*license.EndpointProfile) []map[string]any {
 
 func viewEndpointProfile(p *license.EndpointProfile) map[string]any {
 	return map[string]any{
-		"name":            p.Name,
-		"claude_base_url": p.ClaudeBaseURL,
-		"pool_group":      p.PoolGroup,
-		"active":          p.Active,
-		"created_at":      p.CreatedAt,
+		"name":                   p.Name,
+		"claude_base_url":        p.ClaudeBaseURL,
+		"pool_group":             p.PoolGroup,
+		"active":                 p.Active,
+		"created_at":             p.CreatedAt,
+		"billing_mode":           p.BillingMode,
+		"per_request_cost_cents": int64(p.PerRequestCostCents),
+		"input_cost_per_m":       p.InputCostPerM,
+		"output_cost_per_m":      p.OutputCostPerM,
 	}
 }

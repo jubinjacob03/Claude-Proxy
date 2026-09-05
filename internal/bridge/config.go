@@ -90,7 +90,7 @@ func Load() (*Config, error) {
 
 	c := &Config{
 		Host:             env.str("HOST", "127.0.0.1"),
-		Port:             env.intVal("PORT", 3001),
+		Port:             env.intVal("PORT", 3009),
 		UpstreamBaseURL:  strings.TrimRight(env.str("UPSTREAM_BASE_URL", "https://gorouter.app"), "/"),
 		UpstreamFormat:   UpstreamFormat(strings.ToLower(env.str("UPSTREAM_FORMAT", "anthropic"))),
 		UpstreamAPIKey:   env.str("UPSTREAM_API_KEY", ""),

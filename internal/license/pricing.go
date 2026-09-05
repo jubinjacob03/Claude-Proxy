@@ -64,3 +64,22 @@ func (p *Pricing) All() map[string]Money {
 	}
 	return out
 }
+
+// TokenCost calculates the cost in cents for a token-based request.
+// inputCostPerM and outputCostPerM are fractional cents per million tokens (stored as int64 * 1000 for precision).
+// We use integer arithmetic to avoid floating point drift.
+func TokenCost(inputTokens, outputTokens, inputCentsPer1M, outputCentsPer1M int64) Money {
+	if inputCentsPer1M <= 0 && outputCentsPer1M <= 0 {
+		return 0
+	}
+	// Calculate in milli-cents to preserve precision then round up.
+	inputMilliCents := inputTokens * inputCentsPer1M
+	outputMilliCents := outputTokens * outputCentsPer1M
+	totalMilliCents := inputMilliCents + outputMilliCents
+	// Divide by 1_000_000 (tokens per million) rounding up.
+	cents := (totalMilliCents + 999_999) / 1_000_000
+	if cents < 1 && totalMilliCents > 0 {
+		cents = 1
+	}
+	return Money(cents)
+}

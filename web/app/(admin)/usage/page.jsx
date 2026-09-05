@@ -12,6 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import MotionRow from "@/components/motion/MotionRow";
 
 export default async function UsagePage({ searchParams }) {
   const params = await searchParams;
@@ -35,7 +36,7 @@ export default async function UsagePage({ searchParams }) {
               <ListChecks className="size-5" />
             </div>
             <div>
-              <CardTitle className="font-serif text-2xl font-normal text-white/90">Recent usage</CardTitle>
+              <CardTitle className="font-serif text-2xl font-normal bg-clip-text text-transparent bg-gradient-to-r from-primary to-amber-200">Recent usage</CardTitle>
               <CardDescription>
                 {events.length} matching metered requests
               </CardDescription>
@@ -110,6 +111,7 @@ export default async function UsagePage({ searchParams }) {
                 <th className="px-3 py-3">Provider</th>
                 <th className="px-3 py-3">Model</th>
                 <th className="px-3 py-3">Cost</th>
+                <th className="px-3 py-3">Tokens (in/out)</th>
                 <th className="px-3 py-3">Status</th>
                 <th className="px-3 py-3">Streamed</th>
                 <th className="px-3 py-3">When</th>
@@ -119,7 +121,7 @@ export default async function UsagePage({ searchParams }) {
               {events.map((event) => {
                 const license = licensesById.get(event.license_id);
                 return (
-                  <tr key={event.id} className="border-b border-white/5">
+                  <MotionRow key={event.id} className="border-b border-white/5 transition-colors hover:bg-white/[0.02]">
                     <td className="px-3 py-3 font-mono text-xs">
                       {license ? (
                         <Link
@@ -137,6 +139,9 @@ export default async function UsagePage({ searchParams }) {
                     </td>
                     <td className="px-3 py-3">{event.model}</td>
                     <td className="px-3 py-3">{formatCents(event.cost_cents)}</td>
+                    <td className="px-3 py-3 text-xs text-neutral-400">
+                      {event.input_tokens || 0} / {event.output_tokens || 0}
+                    </td>
                     <td className="px-3 py-3">
                       <Badge
                         variant={event.status_code < 400 ? "success" : "destructive"}
@@ -150,13 +155,16 @@ export default async function UsagePage({ searchParams }) {
                     <td className="px-3 py-3 text-neutral-500">
                       {formatDateTime(event.created_at)}
                     </td>
-                  </tr>
+                  </MotionRow>
                 );
               })}
               {events.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-neutral-500">
-                    No requests match the current filters.
+                  <td colSpan={7} className="px-3 py-10 text-center text-neutral-500">
+                    <div className="flex flex-col items-center gap-2">
+                      <ListChecks className="size-6 opacity-40" />
+                      <p>No requests match the current filters.</p>
+                    </div>
                   </td>
                 </tr>
               ) : null}

@@ -13,7 +13,7 @@ func TestSaveNeverPersistsRelayCredentials(t *testing.T) {
 
 	cfg := &Config{
 		Host:            "127.0.0.1",
-		Port:            3001,
+		Port:            3009,
 		RelayMode:       true,
 		UpstreamBaseURL: "https://license.example.com",
 		UpstreamAPIKey:  "tok_licence_token_value",
@@ -49,7 +49,7 @@ func TestSavePersistsDirectCredentials(t *testing.T) {
 
 	cfg := &Config{
 		Host:            "127.0.0.1",
-		Port:            3001,
+		Port:            3009,
 		UpstreamBaseURL: "https://gorouter.app",
 		UpstreamAPIKey:  "sk-direct-key",
 		UpstreamFormat:  FormatAnthropic,

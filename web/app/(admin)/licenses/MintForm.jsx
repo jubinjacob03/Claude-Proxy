@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import CopyButton from "@/components/CopyButton";
+import { useActionToast } from "@/components/toast/ToastProvider";
 
 const initialState = { error: null, created: null };
 
@@ -14,6 +15,8 @@ export default function MintForm() {
     mintLicenseAction,
     initialState,
   );
+
+  useActionToast(state, state.created?.length > 1 ? `Generated ${state.created.length} licenses` : "Generated license");
 
   return (
     <div className="flex flex-col gap-4">

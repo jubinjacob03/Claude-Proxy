@@ -19,6 +19,8 @@ import {
 import { Input } from "@/components/ui/input";
 import MintForm from "./MintForm";
 import CopyButton from "@/components/CopyButton";
+import MotionRow from "@/components/motion/MotionRow";
+import { ActionForm } from "@/components/ActionForm";
 
 function HwidCell({ bound, hwid }) {
   if (!bound) {
@@ -49,7 +51,7 @@ export default async function LicensesPage() {
               <KeyRound className="size-5" />
             </div>
             <div>
-              <CardTitle className="font-serif text-3xl font-normal text-white/90">Generate licences</CardTitle>
+              <CardTitle className="font-serif text-3xl font-normal bg-clip-text text-transparent bg-gradient-to-r from-primary to-amber-200">Generate licences</CardTitle>
               <CardDescription>
                 The full key is shown below and can be copied at any time from the table.
               </CardDescription>
@@ -63,7 +65,7 @@ export default async function LicensesPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="font-serif text-2xl font-normal text-white/90">All licences</CardTitle>
+          <CardTitle className="font-serif text-2xl font-normal bg-clip-text text-transparent bg-gradient-to-r from-primary to-amber-200">All licences</CardTitle>
           <CardDescription>{licenses.length} issued</CardDescription>
         </CardHeader>
         <CardContent>
@@ -74,7 +76,7 @@ export default async function LicensesPage() {
                   <th className="px-3 py-3">Key</th>
                   <th className="px-3 py-3">Status</th>
                   <th className="px-3 py-3">Machine</th>
-                  <th className="px-3 py-3">Balance</th>
+                  <th className="px-3 py-3">Usage</th>
                   <th className="px-3 py-3">Note</th>
                   <th className="px-3 py-3">Created</th>
                   <th className="px-3 py-3">Actions</th>
@@ -82,11 +84,11 @@ export default async function LicensesPage() {
               </thead>
               <tbody>
                 {licenses.map((l) => (
-                  <tr key={l.id} className="border-b border-white/5">
+                  <MotionRow key={l.id} className="border-b border-white/5 transition-colors hover:bg-white/[0.02]">
                     <td className="px-3 py-3 font-mono text-xs">
                       <div className="flex items-center gap-2">
                         {l.raw_key ? l.raw_key : l.key_hint}
-                        {l.raw_key ? <CopyButton value={l.raw_key} /> : null}
+                        <CopyButton value={l.raw_key || l.key_hint} />
                       </div>
                     </td>
                     <td className="px-3 py-3">
@@ -109,24 +111,29 @@ export default async function LicensesPage() {
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex flex-wrap gap-2">
-                        <form
+                        <ActionForm
                           action={
                             l.active
                               ? pauseLicenseAction.bind(null, l.id)
                               : resumeLicenseAction.bind(null, l.id)
                           }
+                          successMessage={l.active ? "License paused" : "License resumed"}
                         >
                           <Button type="submit" variant="secondary" size="sm">
                             {l.active ? "Pause" : "Resume"}
                           </Button>
-                        </form>
-                        <form action={resetHwidAction.bind(null, l.id)}>
+                        </ActionForm>
+                        <ActionForm
+                          action={resetHwidAction.bind(null, l.id)}
+                          successMessage="HWID reset"
+                        >
                           <Button type="submit" variant="outline" size="sm">
                             Reset HWID
                           </Button>
-                        </form>
-                        <form
+                        </ActionForm>
+                        <ActionForm
                           action={setQuotaAction.bind(null, l.id)}
+                          successMessage="Quota set"
                           className="flex items-center gap-1.5"
                         >
                           <Input
@@ -140,10 +147,10 @@ export default async function LicensesPage() {
                           <Button type="submit" variant="ghost" size="sm">
                             Set
                           </Button>
-                        </form>
+                        </ActionForm>
                       </div>
                     </td>
-                  </tr>
+                  </MotionRow>
                 ))}
                 {licenses.length === 0 ? (
                   <tr>

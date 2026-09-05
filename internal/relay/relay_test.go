@@ -171,8 +171,8 @@ func TestPooledKeyIsInjectedAndNeverReturned(t *testing.T) {
 
 func TestQuotaIsEnforcedAndReportsClearly(t *testing.T) {
 	up := newUpstream(t)
-	// 40 cents buys exactly two 20 cent opus calls.
-	srv, _, lic := newRelay(t, up, 40)
+	// 60 cents buys exactly two 30 cent opus calls.
+	srv, _, lic := newRelay(t, up, 60)
 	token := activate(t, srv.URL, lic.Key, "machine-a")
 	auth := map[string]string{"Authorization": "Bearer " + token}
 
@@ -212,11 +212,11 @@ func TestSpendIsTrackedPerLicence(t *testing.T) {
 
 	gotA, _ := store.Get(first.ID)
 	gotB, _ := store.Get(second.ID)
-	if gotA.SpentCents != 60 {
-		t.Errorf("licence A spent %v, want 60", gotA.SpentCents)
+	if gotA.SpentCents != 90 {
+		t.Errorf("licence A spent %v, want 90", gotA.SpentCents)
 	}
-	if gotB.SpentCents != 20 {
-		t.Errorf("licence B spent %v, want 20 (usage must not pool across users)", gotB.SpentCents)
+	if gotB.SpentCents != 30 {
+		t.Errorf("licence B spent %v, want 30 (usage must not pool across users)", gotB.SpentCents)
 	}
 }
 
@@ -262,6 +262,7 @@ func TestUpstreamFailureIsRefunded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
+	defer store.Close()
 	defer store.Close()
 	store.AddPoolKey("pool", "sk-pooled-secret", license.ProviderClaude, 100000)
 	lic, _ := store.CreateLicense(7000, "")
@@ -324,7 +325,7 @@ func TestUpstreamAuthFailureIsNotBilled(t *testing.T) {
 	}
 }
 
-func TestPoolKeyIsRetiredOnUpstreamAuthOrBalanceFailure(t *testing.T) {
+func TestPoolKeyStaysActiveOnUpstreamAuthOrBalanceFailure(t *testing.T) {
 	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusPaymentRequired} {
 		up := newUpstreamWithStatus(t, status)
 		srv, store, lic := newRelay(t, up, 7000)
@@ -336,9 +337,46 @@ func TestPoolKeyIsRetiredOnUpstreamAuthOrBalanceFailure(t *testing.T) {
 		if len(keys) != 1 {
 			t.Fatalf("keys = %d, want 1", len(keys))
 		}
-		if keys[0].Active {
-			t.Fatalf("status %d left the pool key active", status)
+		if !keys[0].Active {
+			t.Fatalf("status %d disabled the pool key", status)
 		}
+	}
+}
+
+func TestEnablePoolKeyDisablesOtherKeysInGroup(t *testing.T) {
+	dir := t.TempDir()
+	store, err := license.Open(dir, []byte("test-db-key"))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer store.Close()
+	first, err := store.AddPoolKeyInGroup("first", "sk-first", license.ProviderClaude, "group-a", 1000)
+	if err != nil {
+		t.Fatalf("add first: %v", err)
+	}
+	second, err := store.AddPoolKeyInGroup("second", "sk-second", license.ProviderClaude, "group-a", 1000)
+	if err != nil {
+		t.Fatalf("add second: %v", err)
+	}
+	if err := store.SetPoolKeyActive(first.ID, true); err != nil {
+		t.Fatalf("enable first: %v", err)
+	}
+	if err := store.SetPoolKeyActive(second.ID, true); err != nil {
+		t.Fatalf("enable second: %v", err)
+	}
+	one, err := store.GetPoolKey(first.ID)
+	if err != nil {
+		t.Fatalf("get first: %v", err)
+	}
+	two, err := store.GetPoolKey(second.ID)
+	if err != nil {
+		t.Fatalf("get second: %v", err)
+	}
+	if one.Active {
+		t.Fatalf("first key stayed active after enabling second")
+	}
+	if !two.Active {
+		t.Fatalf("second key was not active after enabling it")
 	}
 }
 

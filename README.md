@@ -22,7 +22,7 @@ Copy-Item .env.example .env
 Set these client values in `.env`:
 - `RELAY_BASE_URL` — hosted relay base URL
 - `LICENSE_KEY` — licence key issued by the admin panel
-- `HOST` / `PORT` — local proxy bind address, default `127.0.0.1:3001`
+- `HOST` / `PORT` — local proxy bind address, default `127.0.0.1:3009`
 - `AUTH_TOKEN` — optional local client auth token
 
 The first successful launch activates the machine and writes `license.json` next to the executable. The tray app can show licence status from that cached activation.
@@ -64,11 +64,15 @@ Set these values in `web/.env`:
 
 ## Docker deployment
 
-The repository now ships a three-service stack:
+The repository now ships a two-service stack:
 - [Dockerfile](file:///d:/My-Projects/Claude-Proxy/Dockerfile) for the relay
 - [web/Dockerfile](file:///d:/My-Projects/Claude-Proxy/web/Dockerfile) for the admin panel
-- [docker-compose.yml](file:///d:/My-Projects/Claude-Proxy/docker-compose.yml) for relay + web + Caddy
-- [Caddyfile](file:///d:/My-Projects/Claude-Proxy/Caddyfile) for reverse proxying separate relay and web hostnames
+- [docker-compose.yml](file:///d:/My-Projects/Claude-Proxy/docker-compose.yml) for relay + web
+
+Current public deployment:
+- Web admin panel: `http://68.233.112.166:3005`
+- Relay base URL: `http://68.233.112.166:43219`
+- Local client proxy default bind: `127.0.0.1:3009`
 
 Example:
 
@@ -80,8 +84,6 @@ UPSTREAM_BASE_URL=https://gorouter.app
 ADMIN_USER=admin
 ADMIN_PASSWORD_HASH=...
 SESSION_SECRET=...
-WEB_HOST=admin.example.com
-RELAY_HOST=license.example.com
 docker compose up -d --build
 ```
 

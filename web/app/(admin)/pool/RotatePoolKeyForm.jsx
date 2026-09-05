@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { rotatePoolKeyAction } from "../actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useActionToast } from "@/components/toast/ToastProvider";
 
 const initialState = { error: null };
 
@@ -12,13 +13,14 @@ export default function RotatePoolKeyForm({ id, defaultLabel }) {
     async (_prevState, formData) => {
       try {
         await rotatePoolKeyAction(id, formData);
-        return { error: null };
+        return { error: null, success: true };
       } catch (error) {
         return { error: error.message || "Rotation failed." };
       }
     },
     initialState,
   );
+  useActionToast(state, "Key rotated successfully");
 
   return (
     <form action={formAction} className="flex flex-wrap items-center gap-2">
